@@ -275,6 +275,13 @@ load("@rules_kotlin//kotlin:core.bzl", "kt_register_toolchains")
 
 kt_register_toolchains()  # to use the default toolchain, otherwise see toolchains below
 
+# Register Android SDK toolchain for kt_android_library and Android builds
+load("@bazel_tools//tools/android:android_tools_defaults.bzl", "android_tools_defaults")
+
+android_tools_defaults()
+
+register_toolchains("@bazel_tools//tools/android:android_toolchain")
+
 load("//third_party/stblib:workspace.bzl", stblib = "repo")
 
 stblib()
