@@ -48,6 +48,7 @@ jobs:
       - name: Configure Bazel for Android
         run: |
           echo "build --action_env ANDROID_NDK_HOME=$ANDROID_HOME/ndk/26.1.10909125" >> .bazelrc
+          echo "build --action_env ANDROID_SDK_ROOT=$ANDROID_HOME" >> .bazelrc
           
       - name: Accept Android Licenses
         run: yes | $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager --licenses

@@ -138,10 +138,9 @@ common --registry=https://raw.githubusercontent.com/bazelbuild/bazel-central-reg
 # Android configs. Bazel needs to have --cpu and --fat_apk_cpu both set to the
 # target CPU to build transient dependencies correctly. See
 # https://docs.bazel.build/versions/master/user-manual.html#flag--fat_apk_cpu
-# Commenting out clang_local overriding android toolchain builds.
-#build:android --config=clang_local
-# Enable Android toolchain resolution for kt_android_library and modern Android builds
-build:android --incompatible_enable_android_toolchain_resolution
+# Using environment variables ANDROID_NDK_HOME and ANDROID_SDK_ROOT
+build:android --action_env ANDROID_NDK_HOME
+build:android --action_env ANDROID_SDK_ROOT
 build:android --host_crosstool_top=@bazel_tools//tools/cpp:toolchain
 build:android_arm --config=android
 build:android_arm --cpu=armeabi-v7a
