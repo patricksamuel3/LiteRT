@@ -1,0 +1,85 @@
+name: "android build"
+
+on:
+  pull_request:
+    branches:
+    - main
+  schedule:
+    - cron: "0 0 * * *"  # Runs at 0:00 UTC every day
+  workflow_dispatch:
+    inputs:
+      release_version:
+        description: 'Release version (default: 0.0.0-nightly-SNAPSHOT)'
+        required: false
+        default: ''
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.head_ref || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build_android_packages:
+    name: "Build Android Packages"
+    runs-on: LiteRT_Linux_x64
+    timeout-minutes: 480
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          submodules: 'recursive'
+
+      - name: Install Android NDK r27
+        id: setup-ndk
+        uses: nttld/setup-ndk@v1
+        with:
+          ndk-version: r27
+
+      - name: Export ANDROID_NDK_HOME
+        run: echo "ANDROID_NDK_HOME=${{ steps.setup-ndk.outputs.ndk-path }}" >> "$GITHUB_ENV"
+
+      - name: Configure Android workspace
+        run: |
+          export TF_SET_ANDROID_WORKSPACE=1
+          python3 configure.py -q << EOF
+          N
+          N
+          y
+          N
+          EOF
+        shell: bash
+
+      - name: Run Android build script
+        env:
+        #   RELEASE_VERSION: ${{ github.event.inputs.release_version || '0.0.0-nightly-SNAPSHOT' }}
+          BUILD_LITERT_KOTLIN_API: 'true'
+          BAZEL_CONFIG_FLAGS: '--show_timestamps'
+        run: |
+          chmod +x ci/build_android_package.sh
+          ci/build_android_package.sh
+
+      - name: Verify generated artifacts
+        run: |
+          echo "Generated Android packages:"
+          find ci/gen -type f -name "*.aar" -o -name "*.pom" | sort
+
+    #   - name: Upload build artifacts
+    #     if: success()
+    #     uses: actions/upload-artifact@v4
+    #     with:
+    #       name: android-packages
+    #       path: ci/gen/
+    #       retention-days: 7
+
+      - name: Report build status
+        if: always()
+        run: |
+          if [ $? -eq 0 ]; then
+            echo "Android build completed successfully"
+          else
+            echo "Android build failed"
+            exit 1
+          fi

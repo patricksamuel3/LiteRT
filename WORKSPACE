@@ -109,6 +109,20 @@ load("@org_tensorflow//tensorflow:workspace0.bzl", "tf_workspace0")
 
 tf_workspace0()
 
+# Configure Android SDK and NDK repositories for kt_android_library
+# This registers the Android SDK toolchain that rules_kotlin requires
+load("@bazel_tools//tools/build_defs/repo:android.bzl", "android_sdk_repository", "android_ndk_repository")
+
+android_sdk_repository(
+    name = "androidsdk",
+    api_level = 35,
+)
+
+android_ndk_repository(
+    name = "androidndk",
+    api_level = 26,
+)
+
 load(
     "@xla//third_party/py:python_wheel.bzl",
     "python_wheel_version_suffix_repository",
