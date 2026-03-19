@@ -40,30 +40,28 @@ jobs:
       - name: Export ANDROID_NDK_HOME
         run: echo "ANDROID_NDK_HOME=${{ steps.setup-ndk.outputs.ndk-path }}" >> "$GITHUB_ENV"
 
-      - name: Configure Android workspace
-        run: |
-          export TF_SET_ANDROID_WORKSPACE=1
-          python3 configure.py -q << EOF
-          N
-          N
-          y
-          N
-          EOF
-        shell: bash
-
-      - name: Run Android build script
+      - name: Build Android packages
         env:
-        #   RELEASE_VERSION: ${{ github.event.inputs.release_version || '0.0.0-nightly-SNAPSHOT' }}
-          BUILD_LITERT_KOTLIN_API: 'true'
-          BAZEL_CONFIG_FLAGS: '--show_timestamps'
+          RELEASE_VERSION: ${{ github.event.inputs.release_version || '0.0.0-nightly-SNAPSHOT' }}
         run: |
-          chmod +x ci/build_android_package.sh
-          ci/build_android_package.sh
+          bazel build \
+            -c opt \
+            --config=android_arm64 \
+            --fat_apk_cpu=x86,x86_64,arm64-v8a,armeabi-v7a \
+            --define=android_dexmerger_tool=d8_dexmerger \
+            --define=android_incremental_dexing_tool=d8_dexbuilder \
+            --show_timestamps \
+            //tflite/java:tensorflow-lite-api \
+            //tflite/java:tensorflow-lite \
+            //tflite/java:tensorflow-lite-gpu-api \
+            //tflite/java:tensorflow-lite-gpu \
+            //tflite/acceleration/configuration:gpu_plugin \
+            //tflite/acceleration/configuration:nnapi_plugin
 
-      - name: Verify generated artifacts
+      - name: Verify build outputs
         run: |
-          echo "Generated Android packages:"
-          find ci/gen -type f -name "*.aar" -o -name "*.pom" | sort
+          echo "Build artifacts:"
+          find bazel-bin/tflite/java -name "*.aar" -o -name "*.jar" | sort
 
     #   - name: Upload build artifacts
     #     if: success()
