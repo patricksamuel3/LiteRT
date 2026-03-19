@@ -23,8 +23,7 @@ concurrency:
 jobs:
   build_android_packages:
     name: "Build Android Packages"
-    runs-on: LiteRT_Linux_x64
-    timeout-minutes: 480
+    runs-on: ubuntu-latest
 
     steps:
       - name: Checkout code
