@@ -46,6 +46,10 @@ jobs:
           RELEASE_VERSION: ${{ github.event.inputs.release_version || '0.0.0-nightly-SNAPSHOT' }}
         run: |
           bazel build \
+            --action_env=ANDROID_NDK_HOME="$ANDROID_NDK_HOME" \
+            --action_env=ANDROID_HOME="$ANDROID_HOME" \
+            --repo_env=ANDROID_NDK_HOME="$ANDROID_NDK_HOME" \
+            --repo_env=ANDROID_HOME="$ANDROID_HOME" \
             --noenable_bzlmod \
             -c opt \
             --config=android_arm64 \
