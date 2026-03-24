@@ -45,7 +45,7 @@ jobs:
 
       - name: Build Android packages
         env:
-          USE_BAZEL_VERSION: '6.5.0'
+          USE_BAZEL_VERSION: '7.4.1'
           RELEASE_VERSION: ${{ github.event.inputs.release_version || '0.0.0-nightly-SNAPSHOT' }}
         run: |
           bazel build \
