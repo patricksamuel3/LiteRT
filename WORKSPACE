@@ -125,8 +125,8 @@ http_archive(
     url = "https://github.com/bazelbuild/rules_android_ndk/releases/download/v0.1.5/rules_android_ndk-v0.1.5.tar.gz",
 )
 
-load("@rules_android//rules:rules.bzl", "android_sdk_repository")
-load("@rules_android_ndk//:rules.bzl", "android_ndk_repository")
+# Fall back to Bazel's built-in repository rule to guarantee `@@bazel_tools` toolchain types match for TensorFlow.
+load("@bazel_tools//tools/build_defs/repo:android.bzl", "android_sdk_repository", "android_ndk_repository")
 
 android_sdk_repository(
     name = "androidsdk",
