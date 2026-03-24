@@ -31,6 +31,9 @@ jobs:
         with:
           submodules: 'recursive'
 
+      - name: Setup Bazelisk
+        uses: bazelbuild/setup-bazelisk@v3
+
       - name: Install Android NDK r27
         id: setup-ndk
         uses: nttld/setup-ndk@v1
