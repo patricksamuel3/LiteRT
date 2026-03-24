@@ -34,21 +34,22 @@ jobs:
       - name: Setup Bazelisk
         uses: bazelbuild/setup-bazelisk@v3
 
-      - name: Install Android NDK r27
+      - name: Install Android NDK r25c
         id: setup-ndk
         uses: nttld/setup-ndk@v1
         with:
-          ndk-version: r27
+          ndk-version: r25c
 
       - name: Export ANDROID_NDK_HOME
         run: echo "ANDROID_NDK_HOME=${{ steps.setup-ndk.outputs.ndk-path }}" >> "$GITHUB_ENV"
 
       - name: Build Android packages
         env:
-          USE_BAZEL_VERSION: '7.4.1'
+          USE_BAZEL_VERSION: '7.6.1'
           RELEASE_VERSION: ${{ github.event.inputs.release_version || '0.0.0-nightly-SNAPSHOT' }}
         run: |
           bazel build \
+            --noenable_bzlmod \
             -c opt \
             --config=android_arm64 \
             --fat_apk_cpu=x86,x86_64,arm64-v8a,armeabi-v7a \
