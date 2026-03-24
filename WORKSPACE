@@ -166,57 +166,57 @@ cc_toolchain_deps()
 
 register_toolchains("@rules_ml_toolchain//cc:linux_x86_64_linux_x86_64")
 
-# load(
-#     "@rules_ml_toolchain//gpu/cuda:cuda_json_init_repository.bzl",
-#     "cuda_json_init_repository",
-# )
-# 
-# cuda_json_init_repository()
-#
-# load(
-#     "@cuda_redist_json//:distributions.bzl",
-#     "CUDA_REDISTRIBUTIONS",
-#     "CUDNN_REDISTRIBUTIONS",
-# )
-# load(
-#     "@rules_ml_toolchain//gpu/cuda:cuda_redist_init_repositories.bzl",
-#     "cuda_redist_init_repositories",
-#     "cudnn_redist_init_repository",
-# )
-#
-# cuda_redist_init_repositories(
-#     cuda_redistributions = CUDA_REDISTRIBUTIONS,
-# )
+load(
+    "@rules_ml_toolchain//gpu/cuda:cuda_json_init_repository.bzl",
+    "cuda_json_init_repository",
+)
 
-# load(
-#     "@rules_ml_toolchain//gpu/cuda:cuda_redist_init_repositories.bzl",
-#     "cudnn_redist_init_repository",
-# )
-# 
-# cudnn_redist_init_repository(
-#     cudnn_redistributions = CUDNN_REDISTRIBUTIONS,
-# )
+cuda_json_init_repository()
 
-# load(
-#     "@rules_ml_toolchain//gpu/cuda:cuda_configure.bzl",
-#     "cuda_configure",
-# )
-# 
-# cuda_configure(name = "local_config_cuda")
-# 
-# load(
-#     "@rules_ml_toolchain//gpu/nccl:nccl_redist_init_repository.bzl",
-#     "nccl_redist_init_repository",
-# )
-# 
-# nccl_redist_init_repository()
-# 
-# load(
-#     "@rules_ml_toolchain//gpu/nccl:nccl_configure.bzl",
-#     "nccl_configure",
-# )
-# 
-# nccl_configure(name = "local_config_nccl")
+load(
+    "@cuda_redist_json//:distributions.bzl",
+    "CUDA_REDISTRIBUTIONS",
+    "CUDNN_REDISTRIBUTIONS",
+)
+load(
+    "@rules_ml_toolchain//gpu/cuda:cuda_redist_init_repositories.bzl",
+    "cuda_redist_init_repositories",
+    "cudnn_redist_init_repository",
+)
+
+cuda_redist_init_repositories(
+    cuda_redistributions = CUDA_REDISTRIBUTIONS,
+)
+
+load(
+    "@rules_ml_toolchain//gpu/cuda:cuda_redist_init_repositories.bzl",
+    "cudnn_redist_init_repository",
+)
+
+cudnn_redist_init_repository(
+    cudnn_redistributions = CUDNN_REDISTRIBUTIONS,
+)
+
+load(
+    "@rules_ml_toolchain//gpu/cuda:cuda_configure.bzl",
+    "cuda_configure",
+)
+
+cuda_configure(name = "local_config_cuda")
+
+load(
+    "@rules_ml_toolchain//gpu/nccl:nccl_redist_init_repository.bzl",
+    "nccl_redist_init_repository",
+)
+
+nccl_redist_init_repository()
+
+load(
+    "@rules_ml_toolchain//gpu/nccl:nccl_configure.bzl",
+    "nccl_configure",
+)
+
+nccl_configure(name = "local_config_nccl")
 
 load("//third_party/tqdm:workspace.bzl", tqdm = "repo")
 
