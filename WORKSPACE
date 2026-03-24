@@ -138,6 +138,7 @@ android_ndk_repository(
 )
 
 register_toolchains("@androidndk//:all")
+register_toolchains("@androidsdk//:all")
 
 load(
     "@xla//third_party/py:python_wheel.bzl",
