@@ -45,6 +45,7 @@ jobs:
 
       - name: Build Android packages
         env:
+          USE_BAZEL_VERSION: 7.6.1 # Explicitly declare the Bazel version dependency here
           RELEASE_VERSION: ${{ github.event.inputs.release_version || '0.0.0-nightly-SNAPSHOT' }}
         run: |
           bazel build \
