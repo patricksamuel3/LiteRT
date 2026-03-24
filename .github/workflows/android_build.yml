@@ -54,6 +54,7 @@ jobs:
             -c opt \
             --config=android_arm64 \
             --fat_apk_cpu=x86,x86_64,arm64-v8a,armeabi-v7a \
+            --android_platforms=@org_tensorflow//tensorflow/tools/toolchains/android:x86,@org_tensorflow//tensorflow/tools/toolchains/android:x86_64,@org_tensorflow//tensorflow/tools/toolchains/android:arm64-v8a,@org_tensorflow//tensorflow/tools/toolchains/android:armeabi-v7a \
             --define=android_dexmerger_tool=d8_dexmerger \
             --define=android_incremental_dexing_tool=d8_dexbuilder \
             --show_timestamps \
