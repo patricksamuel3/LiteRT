@@ -130,7 +130,6 @@ load("@rules_android_ndk//:rules.bzl", "android_ndk_repository")
 
 android_sdk_repository(
     name = "androidsdk",
-    api_level = 35,
 )
 
 android_ndk_repository(
