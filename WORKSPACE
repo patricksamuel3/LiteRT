@@ -113,9 +113,9 @@ tf_workspace0()
 # This registers the Android SDK toolchain that rules_kotlin requires
 http_archive(
     name = "rules_android",
-    sha256 = "cd06d15dd8bb59926e4d65f9003bfc20f9da4b2519985c27e190cddc8b7a7806",
-    strip_prefix = "rules_android-0.1.1",
-    url = "https://github.com/bazelbuild/rules_android/archive/v0.1.1.zip",
+    sha256 = "7c45b6aaa837fb6f2f23ad11387638cb00fa9f839a04ec564caac70a543a9cd5",
+    strip_prefix = "rules_android-0.7.1",
+    url = "https://github.com/bazelbuild/rules_android/releases/download/v0.7.1/rules_android-v0.7.1.tar.gz",
 )
 
 http_archive(
@@ -138,6 +138,10 @@ android_ndk_repository(
 
 register_toolchains("@androidndk//:all")
 register_toolchains("@androidsdk//:all")
+
+# Manually alias the SDK toolchain mapped to `@bazel_tools//tools/android:sdk_toolchain_type`
+# for legacy TensorFlow compatibility when Bzlmod is disabled.
+register_toolchains("//:fallback_legacy_android_sdk_toolchain")
 
 load(
     "@xla//third_party/py:python_wheel.bzl",
