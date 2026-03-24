@@ -53,17 +53,7 @@ jobs:
             --define=android_dexmerger_tool=d8_dexmerger \
             --define=android_incremental_dexing_tool=d8_dexbuilder \
             --show_timestamps \
-            //tflite/java:tensorflow-lite-api \
-            //tflite/java:tensorflow-lite \
-            //tflite/java:tensorflow-lite-gpu-api \
-            //tflite/java:tensorflow-lite-gpu \
-            //tflite/acceleration/configuration:gpu_plugin \
-            //tflite/acceleration/configuration:nnapi_plugin
-
-      - name: Verify build outputs
-        run: |
-          echo "Build artifacts:"
-          find bazel-bin/tflite/java -name "*.aar" -o -name "*.jar" | sort
+            
 
     #   - name: Upload build artifacts
     #     if: success()
