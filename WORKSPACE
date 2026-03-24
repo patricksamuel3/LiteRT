@@ -118,8 +118,15 @@ http_archive(
     url = "https://github.com/bazelbuild/rules_android/releases/download/v0.7.1/rules_android-v0.7.1.tar.gz",
 )
 
+http_archive(
+    name = "rules_android_ndk",
+    sha256 = "07e7a2777113bb3d0a432265d1c78cfaa140a5bc4c82be4c8cd988b34382ec90",
+    strip_prefix = "rules_android_ndk-0.1.5",
+    url = "https://github.com/bazelbuild/rules_android_ndk/releases/download/v0.1.5/rules_android_ndk-v0.1.5.tar.gz",
+)
+
 load("@rules_android//rules:rules.bzl", "android_sdk_repository")
-load("@bazel_tools//tools/build_defs/repo:android.bzl", "android_ndk_repository")
+load("@rules_android_ndk//:rules.bzl", "android_ndk_repository")
 
 android_sdk_repository(
     name = "androidsdk",
@@ -128,8 +135,9 @@ android_sdk_repository(
 
 android_ndk_repository(
     name = "androidndk",
-    api_level = 26,
 )
+
+register_toolchains("@androidndk//:all")
 
 load(
     "@xla//third_party/py:python_wheel.bzl",
@@ -189,26 +197,26 @@ register_toolchains("@rules_ml_toolchain//cc:linux_x86_64_linux_x86_64")
 #     cudnn_redistributions = CUDNN_REDISTRIBUTIONS,
 # )
 
-load(
-    "@rules_ml_toolchain//gpu/cuda:cuda_configure.bzl",
-    "cuda_configure",
-)
-
-cuda_configure(name = "local_config_cuda")
-
-load(
-    "@rules_ml_toolchain//gpu/nccl:nccl_redist_init_repository.bzl",
-    "nccl_redist_init_repository",
-)
-
-nccl_redist_init_repository()
-
-load(
-    "@rules_ml_toolchain//gpu/nccl:nccl_configure.bzl",
-    "nccl_configure",
-)
-
-nccl_configure(name = "local_config_nccl")
+# load(
+#     "@rules_ml_toolchain//gpu/cuda:cuda_configure.bzl",
+#     "cuda_configure",
+# )
+# 
+# cuda_configure(name = "local_config_cuda")
+# 
+# load(
+#     "@rules_ml_toolchain//gpu/nccl:nccl_redist_init_repository.bzl",
+#     "nccl_redist_init_repository",
+# )
+# 
+# nccl_redist_init_repository()
+# 
+# load(
+#     "@rules_ml_toolchain//gpu/nccl:nccl_configure.bzl",
+#     "nccl_configure",
+# )
+# 
+# nccl_configure(name = "local_config_nccl")
 
 load("//third_party/tqdm:workspace.bzl", tqdm = "repo")
 
