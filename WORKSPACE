@@ -118,7 +118,8 @@ http_archive(
     url = "https://github.com/bazelbuild/rules_android/releases/download/v0.7.1/rules_android-v0.7.1.tar.gz",
 )
 
-load("@rules_android//rules:rules.bzl", "android_sdk_repository", "android_ndk_repository")
+load("@rules_android//rules:rules.bzl", "android_sdk_repository")
+load("@bazel_tools//tools/build_defs/repo:android.bzl", "android_ndk_repository")
 
 android_sdk_repository(
     name = "androidsdk",
