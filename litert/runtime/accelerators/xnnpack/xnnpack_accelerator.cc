@@ -14,16 +14,18 @@
 
 #include "litert/runtime/accelerators/xnnpack/xnnpack_accelerator.h"
 
+#include <cstring>
+
 #include "litert/c/internal/litert_accelerator_def.h"
 #include "litert/c/internal/litert_delegate_wrapper.h"
+#include "litert/c/internal/litert_runtime_context.h"
 #include "litert/c/litert_common.h"
-#include "litert/c/litert_opaque_options.h"
-#include "litert/c/litert_options.h"
 #include "litert/c/options/litert_cpu_options.h"
 #include "litert/cc/litert_expected.h"
 #include "litert/cc/litert_macros.h"
 #include "litert/runtime/accelerator.h"
 #include "litert/runtime/accelerators/accelerator_implementation_helper.h"
+#include "litert/runtime/litert_cpu_options.h"
 #include "tflite/c/c_api_types.h"
 #include "tflite/delegates/xnnpack/xnnpack_delegate.h"
 
@@ -51,7 +53,9 @@ class CpuAccelerator final
   // C API
 
   // Creates a Dispatch delegate instance.
-  static LiteRtStatus CreateDelegate(LiteRtAccelerator accelerator,
+  static LiteRtStatus CreateDelegate(LiteRtRuntimeContext* runtime_context,
+                                     LiteRtEnvironment env,
+                                     LiteRtAccelerator accelerator,
                                      LiteRtOptions options,
                                      LiteRtDelegateWrapper* delegate_wrapper) {
     LITERT_RETURN_IF_ERROR(delegate_wrapper != nullptr,
@@ -65,49 +69,53 @@ class CpuAccelerator final
         << "Accelerator is not registered to an environment.";
 
     LiteRtOpaqueOptions opaque_options;
-    LITERT_RETURN_IF_ERROR(LiteRtGetOpaqueOptions(options, &opaque_options));
-    LiteRtCpuOptions cpu_options;
-    const auto options_data_status = LiteRtFindOpaqueOptionsData(
-        opaque_options, LiteRtGetCpuOptionsIdentifier(),
-        reinterpret_cast<void**>(&cpu_options));
+    LITERT_RETURN_IF_ERROR(
+        runtime_context->get_opaque_options(options, &opaque_options));
+    const void* cpu_options_data = nullptr;
+    const auto options_data_status = runtime_context->find_opaque_options_data(
+        opaque_options, LrtGetCpuOptionsIdentifier(),
+        const_cast<void**>(&cpu_options_data));
 
+    LiteRtCpuOptionsT parsed_options;
     switch (options_data_status) {
       case kLiteRtStatusOk:
+        if (cpu_options_data) {
+          const char* toml_str = static_cast<const char*>(cpu_options_data);
+          LITERT_RETURN_IF_ERROR(litert::internal::ParseLiteRtCpuOptions(
+              toml_str, strlen(toml_str), &parsed_options));
+        }
         break;
       case kLiteRtStatusErrorNotFound:
-        cpu_options = nullptr;
         break;
       default:
         return options_data_status;
     }
 
-    // TODO: b/403547017 - Make the CPU accelerator configurable using the
-    // compilation options.
-    auto xnn_options = TfLiteXNNPackDelegateOptionsDefault();
-    if (cpu_options != nullptr) {
-      LiteRtGetCpuOptionsNumThread(cpu_options, &xnn_options.num_threads);
-      LiteRtGetCpuOptionsXNNPackFlags(cpu_options, &xnn_options.flags);
-      LITERT_RETURN_IF_ERROR(LiteRtGetCpuOptionsXnnPackWeightCachePath(
-          cpu_options, &xnn_options.weight_cache_file_path));
-      LITERT_RETURN_IF_ERROR(
-          LiteRtGetCpuOptionsXnnPackWeightCacheFileDescriptor(
-              cpu_options, &xnn_options.weight_cache_file_descriptor));
+    if (parsed_options.kernel_mode != kLiteRtCpuKernelModeXnnpack) {
+      *delegate_wrapper = nullptr;
+      return kLiteRtStatusOk;
     }
+
+    auto xnn_options = parsed_options.xnn;
     TfLiteOpaqueDelegate* xnnpack_delegate =
         TfLiteXNNPackDelegateCreate(&xnn_options);
     LITERT_RETURN_IF_ERROR(xnnpack_delegate != nullptr,
                            ErrorStatusBuilder(kLiteRtStatusErrorRuntimeFailure))
         << "XNNPack delegate failed to be created.";
     LITERT_RETURN_IF_ERROR(
-        LiteRtWrapDelegate(xnnpack_delegate, delegate_wrapper));
+        runtime_context->wrap_delegate(xnnpack_delegate, delegate_wrapper));
 
     return kLiteRtStatusOk;
   }
 
   // Destroys an XNNPack delegate instance.
-  static void DestroyDelegate(LiteRtDelegateWrapper delegate_wrapper) {
+  static void DestroyDelegate(LiteRtRuntimeContext* runtime_context,
+                              LiteRtDelegateWrapper delegate_wrapper) {
+    if (delegate_wrapper == nullptr) {
+      return;
+    }
     TfLiteOpaqueDelegate* xnnpack_delegate;
-    LiteRtUnwrapDelegate(delegate_wrapper, &xnnpack_delegate);
+    runtime_context->unwrap_delegate(delegate_wrapper, &xnnpack_delegate);
     TfLiteXNNPackDelegateDelete(xnnpack_delegate);
   }
 
@@ -134,17 +142,16 @@ class CpuAccelerator final
 extern "C" {
 
 // Discovery C object for the CPU (Xnnpack) accelerator by LiteRT.
-// This object is used by the LiteRT environment constructor and the
-// object name is looked up by dlsym().
-LiteRtAcceleratorDef LiteRtCpuAcceleratorImpl = {
+// This object is used by the LiteRT environment constructor.
+static LiteRtAcceleratorDef LiteRtCpuAcceleratorImpl = {
     .version = 1,  // LiteRtAcceleratorDefV1
     .get_name = litert::CpuAccelerator::GetName,
     .get_version = litert::CpuAccelerator::GetVersion,
     .get_hardware_support = litert::CpuAccelerator::GetHardwareSupport,
-    .create_delegate = litert::CpuAccelerator::CreateDelegate,
-    .destroy_delegate = litert::CpuAccelerator::DestroyDelegate,
     .is_tflite_delegate_responsible_for_jit_compilation =
         litert::CpuAccelerator::IsTfLiteDelegateResponsibleForJitCompilation,
+    .create_delegate = litert::CpuAccelerator::CreateDelegate,
+    .destroy_delegate = litert::CpuAccelerator::DestroyDelegate,
     .create_func = nullptr,
     .destroy_func = nullptr,
     .lock_func = nullptr,
@@ -154,20 +161,8 @@ LiteRtAcceleratorDef LiteRtCpuAcceleratorImpl = {
     .num_supported_buffer_types = 0,
 };
 
-// Accelerator definition pointer defined in auto_registration.cc.
-extern LiteRtAcceleratorDef* LiteRtStaticLinkedAcceleratorCpuDef;
+// Accelerator definition pointer referenced by auto_registration.cc.
+LiteRtAcceleratorDef* LiteRtStaticLinkedAcceleratorCpuDef =
+    &LiteRtCpuAcceleratorImpl;
 
 }  // extern "C"
-
-namespace {
-
-class StaticCpuAcceleratorInitializer {
- public:
-  StaticCpuAcceleratorInitializer() {
-    LiteRtStaticLinkedAcceleratorCpuDef = &LiteRtCpuAcceleratorImpl;
-  }
-};
-
-StaticCpuAcceleratorInitializer g_cpu_accelerator_initializer;
-
-}  // namespace

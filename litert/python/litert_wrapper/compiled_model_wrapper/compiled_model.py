@@ -15,7 +15,7 @@
 """Python wrapper for LiteRT compiled models."""
 
 import os
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Optional, Sequence
 
 # pylint: disable=g-import-not-at-top
 if not os.path.splitext(__file__)[0].endswith(
@@ -26,12 +26,17 @@ if not os.path.splitext(__file__)[0].endswith(
       _pywrap_litert_compiled_model_wrapper as _cm,
   )
   from litert.python.litert_wrapper.compiled_model_wrapper import hardware_accelerator
+  from litert.python.litert_wrapper.environment_wrapper import (
+      environment as environment_wrapper,
+  )
   from litert.python.litert_wrapper.tensor_buffer_wrapper import tensor_buffer
   HardwareAccelerator = hardware_accelerator.HardwareAccelerator
+  Environment = environment_wrapper.Environment
   TensorBuffer = tensor_buffer.TensorBuffer
 else:
   # This file is part of ai_edge_litert package.
   from ai_edge_litert import _pywrap_litert_compiled_model_wrapper as _cm
+  from ai_edge_litert.environment import Environment
   from ai_edge_litert.hardware_accelerator import HardwareAccelerator
   from ai_edge_litert.tensor_buffer import TensorBuffer
 # pylint: enable=g-import-not-at-top
@@ -44,19 +49,23 @@ class CompiledModel:
   models using the LiteRT runtime.
   """
 
-  def __init__(self, c_model_ptr):
+  def __init__(self, c_model_ptr, environment: Environment):
     """Initializes the CompiledModel with a C++ model pointer.
 
     Args:
       c_model_ptr: Pointer to the underlying C++ CompiledModelWrapper.
+      environment: Shared LiteRT Environment retained for the lifetime of the
+        compiled model and any buffers created from it.
     """
     self._model = c_model_ptr  # Pointer to C++ CompiledModelWrapper
+    self._environment = environment
 
   @classmethod
   def from_file(
       cls,
       model_path: str,
       hardware_accel: HardwareAccelerator = HardwareAccelerator.CPU,
+      environment: Optional[Environment] = None,
   ) -> "CompiledModel":
     """Creates a CompiledModel from a model file.
 
@@ -65,24 +74,28 @@ class CompiledModel:
       hardware_accel: Hardware acceleration option. Use constants from
         HardwareAccelerator class (e.g., HardwareAccelerator.CPU,
         HardwareAccelerator.GPU). Defaults to CPU.
+      environment: Optional shared LiteRT environment. When omitted, a default
+        environment is created for this model.
 
     Returns:
       A new CompiledModel instance.
     """
+    env = environment or Environment.create(
+        runtime_path=os.path.dirname(os.path.abspath(__file__))
+    )
     ptr = _cm.CreateCompiledModelFromFile(
+        env.capsule,
         model_path,
-        runtime_path=os.path.dirname(os.path.abspath(__file__)),
-        compiler_plugin_path="",
-        dispatch_library_path="",
         hardware_accel=hardware_accel,
     )
-    return cls(ptr)
+    return cls(ptr, env)
 
   @classmethod
   def from_buffer(
       cls,
       model_data: bytes,
       hardware_accel: HardwareAccelerator = HardwareAccelerator.CPU,
+      environment: Optional[Environment] = None,
   ) -> "CompiledModel":
     """Creates a CompiledModel from an in-memory buffer.
 
@@ -91,18 +104,26 @@ class CompiledModel:
       hardware_accel: Hardware acceleration option. Use constants from
         HardwareAccelerator class (e.g., HardwareAccelerator.CPU,
         HardwareAccelerator.GPU). Defaults to CPU.
+      environment: Optional shared LiteRT environment. When omitted, a default
+        environment is created for this model.
 
     Returns:
       A new CompiledModel instance.
     """
+    env = environment or Environment.create(
+        runtime_path=os.path.dirname(os.path.abspath(__file__))
+    )
     ptr = _cm.CreateCompiledModelFromBuffer(
+        env.capsule,
         model_data,
-        runtime_path=os.path.dirname(os.path.abspath(__file__)),
-        compiler_plugin_path="",
-        dispatch_library_path="",
         hardware_accel=hardware_accel,
     )
-    return cls(ptr)
+    return cls(ptr, env)
+
+  @property
+  def environment(self) -> Environment:
+    """Returns the shared LiteRT environment used by this compiled model."""
+    return self._environment
 
   def get_signature_list(self) -> Dict[str, Dict[str, List[str]]]:
     """Returns a dictionary of all available model signatures.
@@ -197,7 +218,7 @@ class CompiledModel:
       A TensorBuffer object for the specified input.
     """
     capsule = self._model.CreateInputBufferByName(signature_key, input_name)
-    return TensorBuffer(capsule)
+    return TensorBuffer(capsule, self._environment)
 
   def create_output_buffer_by_name(
       self, signature_key: str, output_name: str
@@ -212,7 +233,7 @@ class CompiledModel:
       A TensorBuffer object for the specified output.
     """
     capsule = self._model.CreateOutputBufferByName(signature_key, output_name)
-    return TensorBuffer(capsule)
+    return TensorBuffer(capsule, self._environment)
 
   def create_input_buffers(self, signature_index: int) -> List[TensorBuffer]:
     """Creates TensorBuffers for all inputs of the specified signature.
@@ -224,7 +245,7 @@ class CompiledModel:
       List of TensorBuffer objects for all inputs.
     """
     capsule_list = self._model.CreateInputBuffers(signature_index)
-    return [TensorBuffer(c) for c in capsule_list]
+    return [TensorBuffer(c, self._environment) for c in capsule_list]
 
   def create_output_buffers(self, signature_index: int) -> List[TensorBuffer]:
     """Creates TensorBuffers for all outputs of the specified signature.
@@ -236,7 +257,52 @@ class CompiledModel:
       List of TensorBuffer objects for all outputs.
     """
     capsule_list = self._model.CreateOutputBuffers(signature_index)
-    return [TensorBuffer(c) for c in capsule_list]
+    return [TensorBuffer(c, self._environment) for c in capsule_list]
+
+  def resize_input_tensor(
+      self,
+      input_index: int,
+      dims: Sequence[int],
+      signature_index: int = 0,
+      strict: bool = True,
+  ) -> None:
+    """Resizes an input tensor for dynamic-shape execution.
+
+    Args:
+      input_index: Signature-local input index to resize.
+      dims: New input dimensions.
+      signature_index: Signature index. Defaults to 0.
+      strict: When True, require dynamic dimensions in the model signature. When
+        False, use LiteRT's non-strict resize path.
+    """
+    dims = list(dims)
+    if strict:
+      self._model.ResizeInputTensor(signature_index, input_index, dims)
+    else:
+      self._model.ResizeInputTensorNonStrict(signature_index, input_index, dims)
+
+  def resize_input_tensor_by_name(
+      self,
+      signature_key: str,
+      input_name: str,
+      dims: Sequence[int],
+      strict: bool = True,
+  ) -> None:
+    """Resizes an input tensor identified by signature and input name."""
+    signature_index = self.get_signature_index(signature_key)
+    if signature_index < 0:
+      raise ValueError(f"Unknown signature: {signature_key}")
+
+    signature_list = self.get_signature_list()
+    if signature_key not in signature_list:
+      raise ValueError(f"Unknown signature: {signature_key}")
+    input_names = signature_list[signature_key]["inputs"]
+    if input_name not in input_names:
+      raise ValueError(
+          f"Unknown input '{input_name}' for signature '{signature_key}'"
+      )
+    input_index = input_names.index(input_name)
+    self.resize_input_tensor(input_index, dims, signature_index, strict)
 
   def run_by_name(
       self,

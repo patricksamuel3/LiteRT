@@ -15,8 +15,8 @@
 #ifndef THIRD_PARTY_ODML_LITERT_LITERT_C_INTERNAL_LITERT_RUNTIME_C_API_H_
 #define THIRD_PARTY_ODML_LITERT_LITERT_C_INTERNAL_LITERT_RUNTIME_C_API_H_
 
-#include <cstddef>
-#include <cstdint>
+#include <stddef.h>
+#include <stdint.h>
 
 #include "litert/c/internal/litert_scheduling_info.h"
 #include "litert/c/litert_any.h"
@@ -31,13 +31,12 @@
 #include "litert/c/litert_model_types.h"
 #include "litert/c/litert_opaque_options.h"
 #include "litert/c/litert_opencl_types.h"
-#include "litert/c/litert_profiler_event.h"
 #include "litert/c/litert_tensor_buffer_types.h"
 #include "litert/c/litert_webgpu_types.h"
 
+#ifdef __cplusplus
 extern "C" {
-
-// TODO(b/475253786): Clean up build time macros in the function table.
+#endif
 
 // A struct that contains all the LiteRT runtime C API functions.
 //
@@ -415,7 +414,6 @@ typedef struct LiteRtRuntimeCApiStruct {
   // litert_tensor_buffer.h: LiteRtGetTensorBufferHostMemory
   LiteRtStatus (*litert_get_tensor_buffer_host_memory)(
       LiteRtTensorBuffer tensor_buffer, void** host_memory_addr);
-#if LITERT_HAS_AHWB_SUPPORT
   // litert_tensor_buffer.h: LiteRtCreateTensorBufferFromAhwb
   LiteRtStatus (*litert_create_tensor_buffer_from_ahwb)(
       LiteRtEnvironment env, const LiteRtRankedTensorType* tensor_type,
@@ -424,8 +422,6 @@ typedef struct LiteRtRuntimeCApiStruct {
   // litert_tensor_buffer.h: LiteRtGetTensorBufferAhwb
   LiteRtStatus (*litert_get_tensor_buffer_ahwb)(
       LiteRtTensorBuffer tensor_buffer, AHardwareBuffer** ahwb);
-#endif  // LITERT_HAS_AHWB_SUPPORT
-#if LITERT_HAS_ION_SUPPORT
   // litert_tensor_buffer.h: LiteRtCreateTensorBufferFromIonBuffer
   LiteRtStatus (*litert_create_tensor_buffer_from_ion_buffer)(
       const LiteRtRankedTensorType* tensor_type, void* ion_buffer_addr,
@@ -435,8 +431,6 @@ typedef struct LiteRtRuntimeCApiStruct {
   LiteRtStatus (*litert_get_tensor_buffer_ion_buffer)(LiteRtTensorBuffer buffer,
                                                       void** ion_buffer_addr,
                                                       int* ion_buffer_fd);
-#endif  // LITERT_HAS_ION_SUPPORT
-#if LITERT_HAS_DMABUF_SUPPORT
   // litert_tensor_buffer.h: LiteRtCreateTensorBufferFromDmaBufBuffer
   LiteRtStatus (*litert_create_tensor_buffer_from_dma_buf_buffer)(
       const LiteRtRankedTensorType* tensor_type, void* dmabuf_buffer_addr,
@@ -447,8 +441,6 @@ typedef struct LiteRtRuntimeCApiStruct {
   LiteRtStatus (*litert_get_tensor_buffer_dma_buf_buffer)(
       LiteRtTensorBuffer tensor_buffer, void** dmabuf_buffer_addr,
       int* dmabuf_buffer_fd);
-#endif  // LITERT_HAS_DMABUF_SUPPORT
-#if LITERT_HAS_FASTRPC_SUPPORT
   // litert_tensor_buffer.h: LiteRtCreateTensorBufferFromFastRpcBuffer
   LiteRtStatus (*litert_create_tensor_buffer_from_fast_rpc_buffer)(
       const LiteRtRankedTensorType* tensor_type, void* fastrpc_buffer_addr,
@@ -458,8 +450,6 @@ typedef struct LiteRtRuntimeCApiStruct {
   LiteRtStatus (*litert_get_tensor_buffer_fast_rpc_buffer)(
       LiteRtTensorBuffer tensor_buffer, void** fastrpc_buffer_addr,
       int* fastrpc_buffer_fd);
-#endif  // LITERT_HAS_FASTRPC_SUPPORT
-#if LITERT_HAS_OPENCL_SUPPORT
   // litert_tensor_buffer.h: LiteRtCreateTensorBufferFromOpenClMemory
   LiteRtStatus (*litert_create_tensor_buffer_from_opencl_memory)(
       LiteRtEnvironment env, const LiteRtRankedTensorType* tensor_type,
@@ -469,7 +459,6 @@ typedef struct LiteRtRuntimeCApiStruct {
   // litert_tensor_buffer.h: LiteRtGetTensorBufferOpenClMemory
   LiteRtStatus (*litert_get_tensor_buffer_opencl_memory)(
       LiteRtTensorBuffer tensor_buffer, LiteRtClMem* cl_mem_addr);
-#endif  // LITERT_HAS_OPENCL_SUPPORT
   // litert_tensor_buffer.h: LiteRtGetTensorBufferCustomTensorBufferHandle
   LiteRtStatus (*litert_get_tensor_buffer_custom_tensor_buffer_handle)(
       LiteRtTensorBuffer tensor_buffer, HwMemoryHandle* hw_memory_handle);
@@ -492,7 +481,6 @@ typedef struct LiteRtRuntimeCApiStruct {
   LiteRtStatus (*litert_get_tensor_buffer_gl_texture)(
       LiteRtTensorBuffer tensor_buffer, LiteRtGLenum* target, LiteRtGLuint* id,
       LiteRtGLenum* format, size_t* size_bytes, LiteRtGLint* layer);
-#if LITERT_HAS_WEBGPU_SUPPORT
   // litert_tensor_buffer.h: LiteRtCreateTensorBufferFromWebGpuBuffer
   LiteRtStatus (*litert_create_tensor_buffer_from_web_gpu_buffer)(
       LiteRtEnvironment env, const LiteRtRankedTensorType* tensor_type,
@@ -507,8 +495,6 @@ typedef struct LiteRtRuntimeCApiStruct {
       void* webgpu_texture, size_t webgpu_texture_size,
       LiteRtWebGpuTextureDeallocator deallocator,
       LiteRtTensorBuffer* tensor_buffer);
-#endif  // LITERT_HAS_WEBGPU_SUPPORT
-#if LITERT_HAS_METAL_SUPPORT
   // litert_tensor_buffer.h: LiteRtCreateTensorBufferFromMetalMemory
   LiteRtStatus (*litert_create_tensor_buffer_from_metal_memory)(
       LiteRtEnvironment env, const LiteRtRankedTensorType* tensor_type,
@@ -518,12 +504,9 @@ typedef struct LiteRtRuntimeCApiStruct {
   // litert_tensor_buffer.h: LiteRtGetTensorBufferMetalMemory
   LiteRtStatus (*litert_get_tensor_buffer_metal_memory)(
       LiteRtTensorBuffer tensor_buffer, HwMemoryHandle* hw_memory_handle);
-#endif  // LITERT_HAS_METAL_SUPPORT
-#if LITERT_HAS_VULKAN_SUPPORT
   // litert_tensor_buffer.h: LiteRtGetTensorBufferVulkanMemory
   LiteRtStatus (*litert_get_tensor_buffer_vulkan_memory)(
       LiteRtTensorBuffer tensor_buffer, HwMemoryHandle* hw_memory_handle);
-#endif  // LITERT_HAS_VULKAN_SUPPORT
   // litert_tensor_buffer.h: LiteRtCreateManagedTensorBuffer
   LiteRtStatus (*litert_create_managed_tensor_buffer)(
       LiteRtEnvironment env, LiteRtTensorBufferType buffer_type,
@@ -715,33 +698,6 @@ typedef struct LiteRtRuntimeCApiStruct {
                                                      int size_bytes);
 
   //
-  // LiteRtProfiler
-  //
-  // litert_profiler.h: LiteRtCreateProfiler
-  LiteRtStatus (*litert_create_profiler)(int size, LiteRtProfiler* profiler);
-  // litert_profiler.h: LiteRtDestroyProfiler
-  void (*litert_destroy_profiler)(LiteRtProfiler profiler);
-  // litert_profiler.h: LiteRtStartProfiler
-  LiteRtStatus (*litert_start_profiler)(LiteRtProfiler profiler);
-  // litert_profiler.h: LiteRtStopProfiler
-  LiteRtStatus (*litert_stop_profiler)(LiteRtProfiler profiler);
-  // litert_profiler.h: LiteRtResetProfiler
-  LiteRtStatus (*litert_reset_profiler)(LiteRtProfiler profiler);
-  // litert_profiler.h: LiteRtSetProfilerCurrentEventSource
-  LiteRtStatus (*litert_set_profiler_current_event_source)(
-      LiteRtProfiler profiler, ProfiledEventSource event_source);
-  // litert_profiler.h: LiteRtGetNumProfilerEvents
-  LiteRtStatus (*litert_get_num_profiler_events)(LiteRtProfiler profiler,
-                                                 int* num_events);
-  // litert_profiler.h: LiteRtGetProfilerEvents
-  LiteRtStatus (*litert_get_profiler_events)(LiteRtProfiler profiler,
-                                             int num_events,
-                                             ProfiledEventData* events);
-  // litert_profiler.h: LiteRtGetProfileSummary
-  LiteRtStatus (*litert_get_profile_summary)(LiteRtProfiler profiler,
-                                             LiteRtCompiledModel compiled_model,
-                                             const char** summary);
-  //
   // Scheduling info APIs (litert_compiled_model.h)
   //
   // litert_compiled_model.h: LiteRtCompiledModelSetSchedulingInfo
@@ -762,6 +718,8 @@ typedef struct LiteRtRuntimeCApiStruct {
       bool* async, const LiteRtSchedulingInfo* scheduling_info);
 } LiteRtRuntimeCApiStruct;
 
+#ifdef __cplusplus
 }  // extern "C"
+#endif
 
 #endif  // THIRD_PARTY_ODML_LITERT_LITERT_C_INTERNAL_LITERT_RUNTIME_C_API_H_

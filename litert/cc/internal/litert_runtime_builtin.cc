@@ -15,7 +15,6 @@
 #include "litert/cc/internal/litert_runtime_builtin.h"
 
 #include "litert/c/internal/litert_runtime_c_api.h"
-#include "litert/c/litert_common.h"
 #include "litert/c/litert_compiled_model.h"
 #include "litert/c/litert_environment.h"
 #include "litert/c/litert_environment_options.h"
@@ -25,12 +24,11 @@
 #include "litert/c/litert_model.h"
 #include "litert/c/litert_opaque_options.h"
 #include "litert/c/litert_options.h"
-#include "litert/c/litert_profiler.h"
 #include "litert/c/litert_tensor_buffer.h"
 #include "litert/c/litert_tensor_buffer_requirements.h"
 
 // The implementation of the LiteRtRuntimeCApiStruct with the builtin runtime.
-const LiteRtRuntimeCApiStruct kLiteRtRuntimeBuiltin = {
+static const LiteRtRuntimeCApiStruct kBuiltinStruct = {
     // LiteRtEnvironment
     .litert_create_environment = LiteRtCreateEnvironment,
     .litert_destroy_environment = LiteRtDestroyEnvironment,
@@ -159,32 +157,22 @@ const LiteRtRuntimeCApiStruct kLiteRtRuntimeBuiltin = {
     .litert_create_tensor_buffer_from_host_memory =
         LiteRtCreateTensorBufferFromHostMemory,
     .litert_get_tensor_buffer_host_memory = LiteRtGetTensorBufferHostMemory,
-#if LITERT_HAS_AHWB_SUPPORT
     .litert_create_tensor_buffer_from_ahwb = LiteRtCreateTensorBufferFromAhwb,
     .litert_get_tensor_buffer_ahwb = LiteRtGetTensorBufferAhwb,
-#endif  // LITERT_HAS_AHWB_SUPPORT
-#if LITERT_HAS_ION_SUPPORT
     .litert_create_tensor_buffer_from_ion_buffer =
         LiteRtCreateTensorBufferFromIonBuffer,
     .litert_get_tensor_buffer_ion_buffer = LiteRtGetTensorBufferIonBuffer,
-#endif  // LITERT_HAS_ION_SUPPORT
-#if LITERT_HAS_DMABUF_SUPPORT
     .litert_create_tensor_buffer_from_dma_buf_buffer =
         LiteRtCreateTensorBufferFromDmaBufBuffer,
     .litert_get_tensor_buffer_dma_buf_buffer =
         LiteRtGetTensorBufferDmaBufBuffer,
-#endif  // LITERT_HAS_DMABUF_SUPPORT
-#if LITERT_HAS_FASTRPC_SUPPORT
     .litert_create_tensor_buffer_from_fast_rpc_buffer =
         LiteRtCreateTensorBufferFromFastRpcBuffer,
     .litert_get_tensor_buffer_fast_rpc_buffer =
         LiteRtGetTensorBufferFastRpcBuffer,
-#endif  // LITERT_HAS_FASTRPC_SUPPORT
-#if LITERT_HAS_OPENCL_SUPPORT
     .litert_create_tensor_buffer_from_opencl_memory =
         LiteRtCreateTensorBufferFromOpenClMemory,
     .litert_get_tensor_buffer_opencl_memory = LiteRtGetTensorBufferOpenClMemory,
-#endif  // LITERT_HAS_OPENCL_SUPPORT
     .litert_get_tensor_buffer_custom_tensor_buffer_handle =
         LiteRtGetTensorBufferCustomTensorBufferHandle,
     .litert_create_tensor_buffer_from_gl_buffer =
@@ -193,22 +181,16 @@ const LiteRtRuntimeCApiStruct kLiteRtRuntimeBuiltin = {
     .litert_create_tensor_buffer_from_gl_texture =
         LiteRtCreateTensorBufferFromGlTexture,
     .litert_get_tensor_buffer_gl_texture = LiteRtGetTensorBufferGlTexture,
-#if LITERT_HAS_WEBGPU_SUPPORT
     .litert_create_tensor_buffer_from_web_gpu_buffer =
         LiteRtCreateTensorBufferFromWebGpuBuffer,
     .litert_get_tensor_buffer_web_gpu_buffer =
         LiteRtGetTensorBufferWebGpuBuffer,
     .litert_create_tensor_buffer_from_web_gpu_texture =
         LiteRtCreateTensorBufferFromWebGpuTexture,
-#endif  // LITERT_HAS_WEBGPU_SUPPORT
-#if LITERT_HAS_METAL_SUPPORT
     .litert_create_tensor_buffer_from_metal_memory =
         LiteRtCreateTensorBufferFromMetalMemory,
     .litert_get_tensor_buffer_metal_memory = LiteRtGetTensorBufferMetalMemory,
-#endif  // LITERT_HAS_METAL_SUPPORT
-#if LITERT_HAS_VULKAN_SUPPORT
     .litert_get_tensor_buffer_vulkan_memory = LiteRtGetTensorBufferVulkanMemory,
-#endif  // LITERT_HAS_VULKAN_SUPPORT
     .litert_create_managed_tensor_buffer = LiteRtCreateManagedTensorBuffer,
     .litert_create_managed_tensor_buffer_from_requirements =
         LiteRtCreateManagedTensorBufferFromRequirements,
@@ -273,17 +255,6 @@ const LiteRtRuntimeCApiStruct kLiteRtRuntimeBuiltin = {
     .litert_get_opaque_options = LiteRtGetOpaqueOptions,
     .litert_add_custom_op_kernel_option = LiteRtAddCustomOpKernelOption,
     .litert_add_external_tensor_binding = LiteRtAddExternalTensorBinding,
-    // LiteRtProfiler
-    .litert_create_profiler = LiteRtCreateProfiler,
-    .litert_destroy_profiler = LiteRtDestroyProfiler,
-    .litert_start_profiler = LiteRtStartProfiler,
-    .litert_stop_profiler = LiteRtStopProfiler,
-    .litert_reset_profiler = LiteRtResetProfiler,
-    .litert_set_profiler_current_event_source =
-        LiteRtSetProfilerCurrentEventSource,
-    .litert_get_num_profiler_events = LiteRtGetNumProfilerEvents,
-    .litert_get_profiler_events = LiteRtGetProfilerEvents,
-    .litert_get_profile_summary = LiteRtGetProfileSummary,
     // Scheduling info APIs
     .litert_compiled_model_set_scheduling_info =
         LiteRtCompiledModelSetSchedulingInfo,
@@ -292,3 +263,5 @@ const LiteRtRuntimeCApiStruct kLiteRtRuntimeBuiltin = {
     .litert_run_compiled_model_async_with_scheduling_info =
         LiteRtRunCompiledModelAsyncWithSchedulingInfo,
 };
+
+const LiteRtRuntimeCApiStruct* const kLiteRtRuntimeBuiltin = &kBuiltinStruct;

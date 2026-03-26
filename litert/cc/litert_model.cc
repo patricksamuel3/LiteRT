@@ -26,9 +26,14 @@
 #include "litert/c/litert_model.h"
 #include "litert/c/litert_model_types.h"
 #include "litert/cc/internal/litert_detail.h"
+#include "litert/cc/litert_common.h"
 #include "litert/cc/litert_expected.h"
 #include "litert/cc/litert_macros.h"
+#include "litert/cc/litert_model_types.h"
 #include "litert/cc/litert_ranked_tensor_type.h"
+// copybara:uncomment_begin(google_only)
+// #include "litert/core/model/model_load.h"
+// copybara:uncomment_end
 
 namespace litert {
 
@@ -138,6 +143,21 @@ std::vector<std::unique_ptr<SimpleTensor>> FetchSignatureOutputTensors(
 
 }  // namespace
 
+#if !defined(LITERT_DYNAMIC_RUNTIME)
+// copybara:uncomment_begin(google_only)
+// Expected<Model> Model::CreateFromAllocation(
+//     std::unique_ptr<tflite::Allocation> allocation) {
+//   LiteRtModel model;
+//   if (auto status =
+//           LiteRtCreateModelFromAllocation(std::move(allocation), &model);
+//       status != kLiteRtStatusOk) {
+//     return Unexpected(status, "Failed to load model from allocation");
+//   }
+//   return CreateFromOwnedHandle(model);
+// }
+// copybara:uncomment_end
+#endif  // !defined(LITERT_DYNAMIC_RUNTIME)
+
 Expected<std::vector<SimpleSignature>> Model::GetSignatures() const {
   size_t num_signatures = GetNumSignatures();
   std::vector<SimpleSignature> signatures;
@@ -202,7 +222,7 @@ Expected<size_t> Model::GetSignatureIndex(
       return i;
     }
   }
-  return Unexpected(kLiteRtStatusErrorNotFound, "Signature not found");
+  return Unexpected(Status::kErrorNotFound, "Signature not found");
 }
 
 Expected<SimpleSignature> Model::FindSignature(

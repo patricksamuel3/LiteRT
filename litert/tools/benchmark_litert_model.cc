@@ -14,6 +14,7 @@ limitations under the License.
 ==============================================================================*/
 #include "litert/tools/benchmark_litert_model.h"
 
+#include <cstdint>
 #include <cstdlib>
 #include <memory>
 #include <string>
@@ -27,7 +28,7 @@ limitations under the License.
 #include "litert/c/internal/litert_logging.h"
 #include "litert/c/litert_common.h"
 #include "litert/c/options/litert_mediatek_options.h"
-#include "litert/c/options/litert_qualcomm_options.h"
+#include "litert/cc/internal/litert_compiled_model_next.h"
 #include "litert/cc/internal/litert_tflite_error_status_builder.h"
 #include "litert/cc/litert_common.h"
 #include "litert/cc/litert_compiled_model.h"
@@ -52,10 +53,26 @@ limitations under the License.
 
 namespace litert::benchmark {
 namespace {
-using ::litert::CompiledModel;
+using ::litert::CompiledModelNext;
 using ::litert::Options;
 using ::litert::RuntimeOptions;
 using ::litert::TensorBuffer;
+
+HwAcceleratorSet GetRequestedHardwareAccelerators(
+    const BenchmarkParams& params) {
+  HwAcceleratorSet hardware_accelerators(HwAccelerators::kNone);
+  if (params.Get<bool>("use_npu")) {
+    hardware_accelerators |= HwAccelerators::kNpu;
+  }
+  if (params.Get<bool>("use_gpu")) {
+    hardware_accelerators |= HwAccelerators::kGpu;
+  }
+  if (params.Get<bool>("use_cpu") ||
+      !params.Get<bool>("require_full_delegation")) {
+    hardware_accelerators |= HwAccelerators::kCpu;
+  }
+  return hardware_accelerators;
+}
 
 Options CreateCompiledModelOptions(const BenchmarkParams& params) {
   auto use_gpu = params.Get<bool>("use_gpu");
@@ -80,10 +97,10 @@ Options CreateCompiledModelOptions(const BenchmarkParams& params) {
     std::abort();
   }
 
-  HwAcceleratorSet hardware_accelerators(HwAccelerators::kNone);
+  HwAcceleratorSet hardware_accelerators =
+      GetRequestedHardwareAccelerators(params);
 
   if (use_npu) {
-    hardware_accelerators |= HwAccelerators::kNpu;
     // QNN options
     LITERT_ASSIGN_OR_ABORT(auto& qnn_opts,
                            compilation_options.GetQualcommOptions());
@@ -97,8 +114,8 @@ Options CreateCompiledModelOptions(const BenchmarkParams& params) {
             kOptimizeForInferenceO3);
 
     // MTK options
-    LITERT_ASSIGN_OR_ABORT(auto mtk_opts,
-                           ::litert::mediatek::MediatekOptions::Create());
+    LITERT_ASSIGN_OR_ABORT(auto& mtk_opts,
+                           compilation_options.GetMediatekOptions());
     if (mediatek_nerun_pilot_version == "version9") {
       mtk_opts.SetNeronSDKVersionType(
           kLiteRtMediatekOptionsNeronSDKVersionTypeVersion9);
@@ -108,12 +125,10 @@ Options CreateCompiledModelOptions(const BenchmarkParams& params) {
     mtk_opts.SetPerformanceMode(
         kLiteRtMediatekNeuronAdapterPerformanceModeNeuronPreferTurboBoost);
     mtk_opts.SetEnableL1CacheOptimizations(true);
-    compilation_options.AddOpaqueOptions(std::move(mtk_opts));
     // TODO(yunandrew): Add options for other NPU backends.
   }
 
   if (use_gpu) {
-    hardware_accelerators |= HwAccelerators::kGpu;
     LITERT_ASSIGN_OR_ABORT(auto& gpu_options,
                            compilation_options.GetGpuOptions());
     // Enable benchmark mode to run clFinish() after each inference.
@@ -139,9 +154,7 @@ Options CreateCompiledModelOptions(const BenchmarkParams& params) {
     }
   }
 
-  if (use_cpu || !require_full_delegation) {
-    hardware_accelerators |= HwAccelerators::kCpu;
-
+  if (hardware_accelerators & HwAccelerators::kCpu) {
     if (num_threads > 0) {
       LITERT_ASSIGN_OR_ABORT(auto& cpu_options,
                              compilation_options.GetCpuOptions());
@@ -162,9 +175,19 @@ Options CreateCompiledModelOptions(const BenchmarkParams& params) {
 
 litert::Expected<Environment> CreateDefaultEnvironment(
     const BenchmarkParams& params) {
+  const int64_t requested_hardware_accelerators =
+      GetRequestedHardwareAccelerators(params).value;
   if (!params.Get<bool>("use_npu")) {
-    // If NPU is not used, we don't need to set the dispatch library directory.
-    return litert::Environment::Create({});
+    // Only auto-register accelerators required by the selected benchmark path.
+    const std::vector<litert::EnvironmentOptions::Option> environment_options =
+        {
+            litert::EnvironmentOptions::Option{
+                litert::EnvironmentOptions::Tag::kAutoRegisterAccelerators,
+                requested_hardware_accelerators,
+            },
+        };
+    return litert::Environment::Create(
+        litert::EnvironmentOptions(absl::MakeConstSpan(environment_options)));
   }
   auto dispatch_library_path = params.Get<std::string>("dispatch_library_path");
   LITERT_LOG(LITERT_INFO, "dispatch_library_path: %s",
@@ -189,6 +212,10 @@ litert::Expected<Environment> CreateDefaultEnvironment(
       litert::EnvironmentOptions::Option{
           litert::EnvironmentOptions::Tag::kCompilerCacheDir,
           compiler_cache_path.c_str(),
+      },
+      litert::EnvironmentOptions::Option{
+          litert::EnvironmentOptions::Tag::kAutoRegisterAccelerators,
+          requested_hardware_accelerators,
       },
   };
   return litert::Environment::Create(
@@ -256,14 +283,13 @@ TfLiteStatus BenchmarkLiteRtModel::Init() {
   environment_ = std::make_unique<litert::Environment>(std::move(env_result));
 
   auto compilation_options = CreateCompiledModelOptions(params_);
-  LITERT_ASSIGN_OR_RETURN(
-      auto compiled_model_result,
-      litert::CompiledModel::Create(*environment_, model_->Get(),
-                                    compilation_options),
-      AsTfLiteStatus(_ << "Failed to compile model."));
+  LITERT_ASSIGN_OR_RETURN(auto compiled_model_result,
+                          litert::CompiledModelNext::Create(
+                              *environment_, *model_, compilation_options),
+                          AsTfLiteStatus(_ << "Failed to compile model."));
 
-  compiled_model_ =
-      std::make_unique<litert::CompiledModel>(std::move(compiled_model_result));
+  compiled_model_ = std::make_unique<litert::CompiledModelNext>(
+      std::move(compiled_model_result));
 
   LiteRtCompiledModelT* compiled_model_ptr = compiled_model_->Get();
   if (compiled_model_ptr == nullptr) {
@@ -281,13 +307,12 @@ TfLiteStatus BenchmarkLiteRtModel::Init() {
 
   auto use_profiler = params_.Get<bool>("use_profiler");
   if (use_profiler) {
-    LITERT_ASSIGN_OR_ABORT(auto profiler, compiled_model_->GetProfiler());
-    profiler_ = std::make_unique<litert::Profiler>(std::move(profiler));
-    profiler_->StartProfiling();
+    LITERT_ASSIGN_OR_ABORT(profiler_, compiled_model_->GetProfiler());
+    profiler_.StartProfiling();
   }
   log_output_ = std::make_unique<BenchmarkLoggingListener>([this]() {
     if (profiler_) {
-      auto res = profiler_->GetProfileSummary(compiled_model_->Get());
+      auto res = profiler_.GetProfileSummary(compiled_model_->Get());
       if (res.HasValue()) {
         return res.Value();
       }

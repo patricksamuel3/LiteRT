@@ -35,6 +35,7 @@
 #include "litert/core/model/flatbuffer_to_litert.h"
 #include "litert/core/model/model.h"
 #include "litert/core/util/flatbuffer_tools.h"
+#include "tflite/converter/allocation.h"
 #include "tflite/schema/schema_generated.h"
 
 namespace litert::internal {
@@ -128,8 +129,8 @@ LiteRtStatus UnpackOp(FlatbufferContext& context, LiteRtSubgraphT& parent,
 
   if (tfl_op.large_custom_options_size() != 0) {
     // TODO: b/365299994 - Support large custom options.
-    LITERT_LOG(LITERT_ERROR, "Large custom options not yet supported.");
-    return kLiteRtStatusErrorUnsupported;
+    LITERT_LOG(LITERT_WARNING,
+               "Large custom options not yet supported in litert::Model.");
   }
 
   const auto* custom_opts = tfl_op.custom_options();
@@ -224,8 +225,7 @@ LiteRtStatus UnpackTensor(FlatbufferContext& context,
   // QUANTIZATION
 
   if (tfl_tensor.quantization()) {
-    auto quantization =
-        MapQuantization(tfl_tensor.quantization());
+    auto quantization = MapQuantization(tfl_tensor.quantization());
     if (!quantization) {
       return quantization.Error().Status();
     }
@@ -285,11 +285,25 @@ LiteRtStatus UnpackSubgraph(FlatbufferContext& context,
   const auto num_inputs = tfl_subgraph.inputs()->size();
   for (auto i = 0; i < num_inputs; ++i) {
     const auto tfl_input_ind = tfl_subgraph.inputs()->Get(i);
+    if (tfl_input_ind < 0 ||
+        static_cast<size_t>(tfl_input_ind) >= num_tensors) {
+      LITERT_LOG(LITERT_ERROR,
+                 "flatbuffer model has invalid input index in subgraph: %d",
+                 tfl_input_ind);
+      return kLiteRtStatusErrorInvalidFlatbuffer;
+    }
     litert_subgraph.Inputs().push_back(&litert_subgraph.Tensor(tfl_input_ind));
   }
   const auto num_outputs = tfl_subgraph.outputs()->size();
   for (auto i = 0; i < num_outputs; ++i) {
     const auto tfl_output_ind = tfl_subgraph.outputs()->Get(i);
+    if (tfl_output_ind < 0 ||
+        static_cast<size_t>(tfl_output_ind) >= num_tensors) {
+      LITERT_LOG(LITERT_ERROR,
+                 "flatbuffer model has invalid output index in subgraph: %d",
+                 tfl_output_ind);
+      return kLiteRtStatusErrorInvalidFlatbuffer;
+    }
     litert_subgraph.Outputs().push_back(
         &litert_subgraph.Tensor(tfl_output_ind));
   }
@@ -442,6 +456,16 @@ Expected<LiteRtModelT::Ptr> LoadModelFromBuffer(
   return UnpackModel(std::move(**flatbuffer));
 }
 
+Expected<LiteRtModelT::Ptr> LoadModelFromAllocation(
+    tflite::Allocation::Ptr allocation) {
+  auto flatbuffer =
+      FlatbufferWrapper::CreateFromAllocation(std::move(allocation));
+  if (!flatbuffer) {
+    return flatbuffer.Error();
+  }
+  return UnpackModel(std::move(**flatbuffer));
+}
+
 Expected<LiteRtModelT::Ptr> LoadModelFromBuffer(BufferRef<uint8_t> buffer) {
   auto flatbuffer = FlatbufferWrapper::CreateFromBuffer(buffer);
   if (!flatbuffer) {
@@ -469,10 +493,9 @@ Expected<LiteRtModelT::Ptr> LoadModelFromFile(absl::string_view filename,
         DispatchOpOptions dispatch_opts =
             GetDispatchOpOptions(op->CustomOptions());
         if (!buffer_id_map.contains(dispatch_opts.bytecode_offset)) {
-          BufferRef<uint8_t> byte_code(
-              GetTflFlatbuffer(*model).AllocBase() +
-                  dispatch_opts.bytecode_offset,
-              dispatch_opts.bytecode_size);
+          BufferRef<uint8_t> byte_code(GetTflFlatbuffer(*model).AllocBase() +
+                                           dispatch_opts.bytecode_offset,
+                                       dispatch_opts.bytecode_size);
           const BufferManager::BufferId buf_id =
               model->Buffers()->RegisterNonOwnedBuffer(byte_code);
           buffer_id_map.insert({dispatch_opts.bytecode_offset, buf_id});

@@ -31,6 +31,12 @@ package(
 #     name = "mlir_test_data",
 #     srcs = glob(["testdata/*.mlir"]),
 # )
+#
+# tfl_model_gen(
+#     name = "mlir_test_data_stablehlo",
+#     srcs = glob(["testdata/stablehlo/*.mlir"]),
+#     subdir = "testdata/stablehlo",
+# )
 # copybara:uncomment_end
 
 # copybara:comment_begin(external)
@@ -71,7 +77,34 @@ filegroup(
     srcs = glob([
         "testdata/*.tflite",
         "testdata/*.bin",
-    ]) + [":mlir_test_data"],
+    ]) + [
+        ":mlir_test_data",
+        ":mlir_test_data_stablehlo",
+    ],
+)
+
+filegroup(
+    name = "extern_weight_test_data",
+    srcs = glob([
+        "testdata/sample_output/*",
+    ]),
+)
+
+filegroup(
+    name = "extern_weight_model_file",
+    srcs = ["testdata/sample_output/model.tflite"],
+)
+
+filegroup(
+    name = "extern_weight_test_data_single_weight",
+    srcs = [
+        "testdata/sample_output_single_weight/weights.bin",
+    ],
+)
+
+filegroup(
+    name = "extern_weight_model_file_single_weight",
+    srcs = ["testdata/sample_output_single_weight/model.tflite"],
 )
 
 cc_library(
@@ -311,6 +344,7 @@ cc_library(
     testonly = True,
     hdrs = ["simple_buffer.h"],
     deps = [
+        "//litert/c:litert_common",
         "//litert/c:litert_runtime_c_api_shared_lib",
         "//litert/cc:litert_buffer_ref",
         "//litert/cc:litert_element_type",

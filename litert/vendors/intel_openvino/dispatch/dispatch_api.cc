@@ -13,8 +13,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include <exception>
-
+#include "openvino/core/except.hpp"
 #include "litert/c/internal/litert_logging.h"
 #include "litert/c/internal/litert_scheduling_info.h"
 #include "litert/c/litert_common.h"
@@ -39,7 +38,7 @@ namespace litert {
 namespace openvino {
 
 #if defined(LITERT_WINDOWS_OS)
-LiteRtStatus CreateRemoteTensorBuffer(LiteRtEnvironment env,
+LiteRtStatus CreateRemoteTensorBuffer(void* device_id, void* queue_id,
                                       const LiteRtRankedTensorType* tensor_type,
                                       LiteRtTensorBufferType buffer_type,
                                       size_t bytes, size_t packed_bytes,
@@ -57,8 +56,7 @@ LiteRtStatus CreateRemoteTensorBuffer(LiteRtEnvironment env,
   return kLiteRtStatusOk;
 }
 
-LiteRtStatus DestroyRemoteTensorBuffer(LiteRtEnvironment env,
-                                       HwMemoryInfoPtr hw_memory_info) {
+LiteRtStatus DestroyRemoteTensorBuffer(HwMemoryInfoPtr hw_memory_info) {
   RemoteTensorBuffer* custom_tensor_buffer =
       reinterpret_cast<RemoteTensorBuffer*>(hw_memory_info->memory_handle);
   if (custom_tensor_buffer->GetZeroBufferPtr()) {
@@ -68,13 +66,11 @@ LiteRtStatus DestroyRemoteTensorBuffer(LiteRtEnvironment env,
   return kLiteRtStatusOk;
 }
 
-LiteRtStatus UnlockRemoteTensorBuffer(LiteRtEnvironment env,
-                                      HwMemoryInfoPtr hw_memory_info) {
+LiteRtStatus UnlockRemoteTensorBuffer(HwMemoryInfoPtr hw_memory_info) {
   return kLiteRtStatusOk;
 }
 
-LiteRtStatus LockRemoteTensorBuffer(LiteRtEnvironment env,
-                                    HwMemoryInfoPtr hw_memory_info,
+LiteRtStatus LockRemoteTensorBuffer(HwMemoryInfoPtr hw_memory_info,
                                     LiteRtTensorBufferLockMode mode,
                                     void** host_memory_ptr) {
   RemoteTensorBuffer* custom_tensor_buffer =
@@ -104,7 +100,9 @@ LiteRtStatus DispatchInitialize(LiteRtEnvironment env, LiteRtOptions options) {
   LITERT_RETURN_IF_ERROR(LiteRtRegisterTensorBufferHandlers(
       env, kLiteRtTensorBufferTypeOpenVINOTensorBuffer,
       CreateRemoteTensorBuffer, DestroyRemoteTensorBuffer,
-      LockRemoteTensorBuffer, UnlockRemoteTensorBuffer, nullptr, nullptr));
+      LockRemoteTensorBuffer, UnlockRemoteTensorBuffer, nullptr, nullptr,
+      /*device_tag=*/kLiteRtEnvOptionTagNull,
+      /*queue_tag=*/kLiteRtEnvOptionTagNull));
 #endif  // LITERT_WINDOWS_OS
 
   return kLiteRtStatusOk;
@@ -140,7 +138,7 @@ LiteRtStatus DispatchGetCapabilities(int* capabilities) {
 // LiteRtDispatchDeviceContextDestroy() to release it. Return NULL in case of
 // error.
 LiteRtStatus DispatchDeviceContextCreate(
-    LiteRtDispatchDeviceContext* device_context) {
+    LiteRtOptions options, LiteRtDispatchDeviceContext* device_context) {
   try {
     if (auto context = LiteRtDispatchDeviceContextT::Create(); context) {
       *device_context = context->release();
@@ -150,7 +148,7 @@ LiteRtStatus DispatchDeviceContextCreate(
                  context.Error().Message().c_str());
       return context.Error().Status();
     }
-  } catch (const std::exception& e) {
+  } catch (const ov::Exception& e) {
     LITERT_LOG(LITERT_ERROR, "Exception in Dispatch device_context_create: %s",
                e.what());
     return kLiteRtStatusErrorRuntimeFailure;
@@ -221,7 +219,7 @@ LiteRtStatus DispatchRegisterTensorBuffer(
       *tensor_buffer_handle = *status;
       return kLiteRtStatusOk;
     }
-  } catch (const std::exception& e) {
+  } catch (const ov::Exception& e) {
     LITERT_LOG(LITERT_ERROR, "Exception in Dispatch register_tensor_buffer: %s",
                e.what());
     return kLiteRtStatusErrorRuntimeFailure;
@@ -246,7 +244,7 @@ LiteRtStatus DispatchUnregisterTensorBuffer(
     } else {
       return kLiteRtStatusOk;
     }
-  } catch (const std::exception& e) {
+  } catch (const ov::Exception& e) {
     LITERT_LOG(LITERT_ERROR,
                "Exception in Dispatch unregister_tensor_buffer: %s", e.what());
     return kLiteRtStatusErrorRuntimeFailure;
@@ -274,7 +272,7 @@ LiteRtStatus DispatchInvocationContextCreate(
     }
     *invocation_context = context->release();
     return kLiteRtStatusOk;
-  } catch (const std::exception& e) {
+  } catch (const ov::Exception& e) {
     LITERT_LOG(LITERT_ERROR,
                "Exception in Dispatch invocation_context_create: %s", e.what());
     return kLiteRtStatusErrorRuntimeFailure;
@@ -309,7 +307,7 @@ LiteRtStatus DispatchAttachInput(
       return status.Error().Status();
     }
     return kLiteRtStatusOk;
-  } catch (const std::exception& e) {
+  } catch (const ov::Exception& e) {
     LITERT_LOG(LITERT_ERROR, "Exception in Dispatch attach_input: %s",
                e.what());
     return kLiteRtStatusErrorRuntimeFailure;
@@ -328,7 +326,7 @@ LiteRtStatus DispatchAttachOutput(
       return status.Error().Status();
     }
     return kLiteRtStatusOk;
-  } catch (const std::exception& e) {
+  } catch (const ov::Exception& e) {
     LITERT_LOG(LITERT_ERROR, "Exception in Dispatch attach_output: %s",
                e.what());
     return kLiteRtStatusErrorRuntimeFailure;
@@ -370,7 +368,7 @@ LiteRtStatus DispatchInvoke(
       return status.Error().Status();
     }
     return kLiteRtStatusOk;
-  } catch (const std::exception& e) {
+  } catch (const ov::Exception& e) {
     LITERT_LOG(LITERT_ERROR, "Exception in Dispatch invoke: %s", e.what());
     return kLiteRtStatusErrorRuntimeFailure;
   }

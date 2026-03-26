@@ -43,6 +43,13 @@ extern "C" {
 #define LITERT_CAPI_EXPORT __attribute__((visibility("default")))
 #endif  // LITERT_WINDOWS_OS
 
+#if defined(__linux__)
+// Disable CFI check for calling shared library functions.
+#define LITERT_NO_CFI_CHECK __attribute__((no_sanitize("cfi-icall")))
+#else
+#define LITERT_NO_CFI_CHECK
+#endif  // __linux__
+
 // Declares canonical opaque type.
 
 #ifdef __cplusplus
@@ -122,13 +129,13 @@ LITERT_DEFINE_HANDLE(LiteRtExternalLiteRtBufferContext);
 #define LITERT_HAS_ION_SUPPORT_DEFAULT 1
 #define LITERT_HAS_DMABUF_SUPPORT_DEFAULT 1
 #define LITERT_HAS_FASTRPC_SUPPORT_DEFAULT 1
-// copybara:comment_begin(google-only)
-#elif defined(GOOGLE_UNSUPPORTED_OS_LOONIX)
-#define LITERT_HAS_OPENGL_SUPPORT_DEFAULT 0
-#define LITERT_HAS_ION_SUPPORT_DEFAULT 0
-#define LITERT_HAS_DMABUF_SUPPORT_DEFAULT 1
-#define LITERT_HAS_FASTRPC_SUPPORT_DEFAULT 0
-// copybara:comment_end
+// copybara:uncomment_begin(google-only)
+// #elif defined(GOOGLE_UNSUPPORTED_OS_LOONIX)
+// #define LITERT_HAS_OPENGL_SUPPORT_DEFAULT 0
+// #define LITERT_HAS_ION_SUPPORT_DEFAULT 0
+// #define LITERT_HAS_DMABUF_SUPPORT_DEFAULT 1
+// #define LITERT_HAS_FASTRPC_SUPPORT_DEFAULT 0
+// copybara:uncomment_end
 #else
 #define LITERT_HAS_AHWB_SUPPORT_DEFAULT 0
 #define LITERT_HAS_OPENGL_SUPPORT_DEFAULT 0

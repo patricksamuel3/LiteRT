@@ -22,7 +22,9 @@ if not os.path.splitext(__file__)[0].endswith(
     os.path.join("ai_edge_litert", "tensor_buffer")
 ):
   # This file is part of litert package.
-  from litert.python.litert_wrapper.tensor_buffer_wrapper import _pywrap_litert_tensor_buffer_wrapper as _tb
+  from litert.python.litert_wrapper.tensor_buffer_wrapper import (
+      _pywrap_litert_tensor_buffer_wrapper as _tb,
+  )
 else:
   # This file is part of ai_edge_litert package.
   from ai_edge_litert import _pywrap_litert_tensor_buffer_wrapper as _tb
@@ -39,13 +41,16 @@ class TensorBuffer:
   buffers in Python.
   """
 
-  def __init__(self, capsule):
+  def __init__(self, capsule, environment=None):
     """Initializes a TensorBuffer with the provided PyCapsule.
 
     Args:
       capsule: A PyCapsule containing a pointer to a LiteRtTensorBuffer.
+      environment: Optional Environment object retained to keep the shared
+        LiteRT runtime context alive for buffers created by a CompiledModel.
     """
     self._capsule = capsule
+    self._environment = environment
 
   @staticmethod
   def _dtype_to_str(np_dtype):
@@ -148,6 +153,7 @@ class TensorBuffer:
     """
     _tb.DestroyTensorBuffer(self._capsule)
     self._capsule = None
+    self._environment = None
 
   @property
   def capsule(self):

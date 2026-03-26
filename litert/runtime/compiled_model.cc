@@ -19,6 +19,7 @@
 #include <cstdarg>
 #include <cstddef>
 #include <cstdint>
+#include <cstdlib>
 #include <cstring>
 #include <functional>
 #include <iterator>
@@ -28,6 +29,9 @@
 #include <string>
 #include <utility>
 #include <vector>
+
+#include "litert/c/options/litert_cpu_options.h"
+#include "tflite/mutable_op_resolver.h"
 
 #if !defined(LITERT_WINDOWS_OS)
 #include <unistd.h>
@@ -52,6 +56,7 @@
 #include "litert/c/internal/litert_accelerator.h"
 #include "litert/c/internal/litert_delegate_wrapper.h"
 #include "litert/c/internal/litert_logging.h"
+#include "litert/c/internal/litert_runtime_context.h"
 #include "litert/c/internal/litert_scheduling_info.h"
 #include "litert/c/litert_any.h"
 #include "litert/c/litert_common.h"
@@ -84,7 +89,9 @@
 #include "litert/runtime/custom_op_dispatcher.h"
 #include "litert/runtime/dispatch/dispatch_opaque_options.h"
 #include "litert/runtime/external_litert_buffer_context.h"
+#if !defined(LITERT_DISABLE_CPU)
 #include "litert/runtime/litert_cpu_options.h"
+#endif  // !defined(LITERT_DISABLE_CPU)
 #include "litert/runtime/litert_runtime_options.h"
 #include "litert/runtime/magic_number_utils.h"
 #include "litert/runtime/metrics.h"
@@ -92,9 +99,14 @@
 #include "litert/runtime/tensor_buffer_requirements.h"
 #include "litert/runtime/tensor_identifier.h"
 #include "litert/runtime/tfl_utils.h"
-#if defined(LITERT_WITH_EXTERNAL_WEIGHT_LOADER)
+#if defined(LITERT_ENABLE_FABRIC_INTEGRATION)
+#include "litert/runtime/fabric/compiled_model_fabric_internal.h"
+#include "litert/runtime/fabric/litert_fabric_options.h"
+#include "third_party/odml/infra/fabric/runtime/tg_proto_converter.h"
+#include "third_party/odml/infra/fabric/runtime/transmission_graph.pb.h"
+#include "litert/runtime/fabric/dispatch_runner_sb.h"
+#endif  // defined(LITERT_ENABLE_FABRIC_INTEGRATION)
 #include "weight_loader/external_weight_loader_litert.h"
-#endif  // defined(LITERT_WITH_EXTERNAL_WEIGHT_LOADER)
 #include "tflite/converter/allocation.h"
 #include "tflite/builtin_ops.h"
 #include "tflite/core/api/profiler.h"
@@ -103,6 +115,7 @@
 #include "tflite/interpreter_options.h"
 #if !defined(LITERT_NO_BUILTIN_OPS)
 #include "tflite/kernels/register.h"
+#include "tflite/kernels/register_ref.h"
 #endif  // LITERT_NO_BUILTIN_OPS
 
 #if defined(LITERT_NO_BUILTIN_OPS)
@@ -235,17 +248,71 @@ void ApplySchedulingInfoOverrides(const LiteRtSchedulingInfo& overrides,
 
 }  // namespace
 
+LiteRtCompiledModelT::LiteRtCompiledModelT(LiteRtEnvironmentT* env)
+    : env_(env) {}
+
+LiteRtCompiledModelT::~LiteRtCompiledModelT() {
+  if (profiler_ != nullptr) {
+    delete profiler_;
+    profiler_ = nullptr;
+  }
+}
+
 Expected<void> LiteRtCompiledModelT::InitializeRuntime(
     LiteRtEnvironmentT* env, LiteRtHwAcceleratorSet hardware_accelerators,
     LiteRtOptions jit_compilation_options) {
+  int num_threads = 1;
+  [[maybe_unused]] bool use_non_xnnpack_cpu_backend = false;
+  bool use_reference_cpu_kernels = false;
+#if !defined(LITERT_DISABLE_CPU)
+  LiteRtCpuOptionsT cpu_options;
+  if (jit_compilation_options &&
+      (hardware_accelerators & kLiteRtHwAcceleratorCpu)) {
+    auto opaque_options = litert::OpaqueOptions::WrapCObject(
+        jit_compilation_options->options, litert::OwnHandle::kNo);
+    if (auto cpu_options_data = litert::FindOpaqueData<const char>(
+            opaque_options, LiteRtCpuOptionsT::Identifier());
+        cpu_options_data) {
+      absl::string_view data_str(*cpu_options_data);
+      if (litert::internal::ParseLiteRtCpuOptions(
+              data_str.data(), data_str.size(), &cpu_options) !=
+          kLiteRtStatusOk) {
+        LITERT_LOG(LITERT_WARNING, "Failed to parse CPU options");
+      } else {
+        num_threads = cpu_options.xnn.num_threads;
+        use_non_xnnpack_cpu_backend =
+            cpu_options.kernel_mode != kLiteRtCpuKernelModeXnnpack;
+        use_reference_cpu_kernels =
+            cpu_options.kernel_mode == kLiteRtCpuKernelModeReference;
+      }
+    }
+  }
+#endif  // !defined(LITERT_DISABLE_CPU)
+
 #ifdef LITERT_NO_BUILTIN_OPS
+  if ((hardware_accelerators & kLiteRtHwAcceleratorCpu) &&
+      use_non_xnnpack_cpu_backend) {
+    return Unexpected(kLiteRtStatusErrorInvalidArgument,
+                      "Builtin and reference CPU kernel modes require builtin "
+                      "kernels.");
+  }
   // Use StubOpResolver which provides minimal stub implementations for all
   // builtin ops. These stubs allow the model to pass validation, but the
   // actual operations will be handled by LiteRT's accelerator system
   // (NPU > GPU > CPU) through their respective delegates.
-  litert::internal::StubOpResolver resolver;
+  litert::internal::StubOpResolver resolver_storage;
+  tflite::MutableOpResolver* resolver = &resolver_storage;
 #else
-  tflite::ops::builtin::BuiltinOpResolverWithoutDefaultDelegates resolver;
+  std::unique_ptr<tflite::MutableOpResolver> resolver_storage;
+  if ((hardware_accelerators & kLiteRtHwAcceleratorCpu) &&
+      use_reference_cpu_kernels) {
+    resolver_storage =
+        std::make_unique<tflite::ops::builtin::BuiltinRefOpResolver>();
+  } else {
+    resolver_storage = std::make_unique<
+        tflite::ops::builtin::BuiltinOpResolverWithoutDefaultDelegates>();
+  }
+  tflite::MutableOpResolver* resolver = resolver_storage.get();
 #endif  // LITERT_NO_BUILTIN_OPS
 
   // Apply custom ops.
@@ -255,24 +322,30 @@ Expected<void> LiteRtCompiledModelT::InitializeRuntime(
           std::make_unique<litert::internal::CustomOpDispatcher>(option));
       auto* tflite_registration =
           custom_op_dispatchers_.back()->GetTfLiteRegistration();
-      resolver.AddCustom(option.op_name.c_str(), tflite_registration);
+      resolver->AddCustom(option.op_name.c_str(), tflite_registration);
     }
   }
 
   // Add custom ops that are supported by the CPU / GPU accelerators.
   if (hardware_accelerators & kLiteRtHwAcceleratorGpu) {
     const char* accelerator_supported_custom_ops[] = {
-        "Convolution2DTransposeBias", "MaxPoolingWithArgmax2D",
-        "MaxUnpooling2D", "Resampler"};
+        "Convolution2DTransposeBias",
+        "MaxPoolingWithArgmax2D",
+        "MaxUnpooling2D",
+        "Resampler",
+        "custom_call.GroupNorm",
+        "custom_call.LayerNorm",
+        "custom_call.RmsNorm",
+        "custom_call.PixelShuffle"};
     for (const auto& op_name : accelerator_supported_custom_ops) {
-      resolver.AddCustom(op_name, &sStubRegistration);
+      resolver->AddCustom(op_name, &sStubRegistration);
     }
   } else if (hardware_accelerators & kLiteRtHwAcceleratorCpu) {
     const char* accelerator_supported_custom_ops[] = {
         "Convolution2DTransposeBias", "MaxPoolingWithArgmax2D",
         "MaxUnpooling2D"};
     for (const auto& op_name : accelerator_supported_custom_ops) {
-      resolver.AddCustom(op_name, &sStubRegistration);
+      resolver->AddCustom(op_name, &sStubRegistration);
     }
   }
 #ifdef __EMSCRIPTEN__
@@ -280,14 +353,13 @@ Expected<void> LiteRtCompiledModelT::InitializeRuntime(
     const char* accelerator_supported_custom_ops[] = {
         "Convolution2DTransposeBias"};
     for (const auto& op_name : accelerator_supported_custom_ops) {
-      resolver.AddCustom(op_name, &sStubRegistration);
+      resolver->AddCustom(op_name, &sStubRegistration);
     }
   }
 #endif  // __EMSCRIPTEN__
 
   tflite::InterpreterOptions interpreter_options;
   interpreter_options.SetUseSignatureTensorNames(true);
-  int num_threads = 1;
   if (jit_compilation_options) {
     auto opaque_options = litert::OpaqueOptions::WrapCObject(
         jit_compilation_options->options, litert::OwnHandle::kNo);
@@ -323,16 +395,10 @@ Expected<void> LiteRtCompiledModelT::InitializeRuntime(
         }
       }
     }
-
-    if (auto cpu_options = litert::FindOpaqueData<LiteRtCpuOptionsT>(
-            opaque_options, LiteRtCpuOptionsT::Identifier());
-        cpu_options) {
-      num_threads = (*cpu_options)->xnn.num_threads;
-    }
   }
 
   tflite::InterpreterBuilder builder(
-      fb_model_->GetModel(), resolver, error_reporter_.get(),
+      fb_model_->GetModel(), *resolver, error_reporter_.get(),
       &interpreter_options, fb_model_->allocation());
   builder(&interp_);
   if (interp_ == nullptr) {
@@ -390,19 +456,25 @@ Expected<void> LiteRtCompiledModelT::InitializeRuntime(
       std::make_unique<LiteRtExternalLiteRtBufferContextT>(env, get_tensor_id);
   interp_->SetExternalContext(kTfLiteLiteRtBufferContext,
                               buffer_context_.get());
-#if defined(LITERT_WITH_EXTERNAL_WEIGHT_LOADER)
+
   std::unique_ptr<litert::ScopedWeightSource> scoped_weight_source;
   auto* options_impl =
-    reinterpret_cast<LiteRtOptionsT*>(jit_compilation_options);
+      reinterpret_cast<LiteRtOptionsT*>(jit_compilation_options);
   if (options_impl != nullptr) {
+    options_impl->weight_loader = nullptr;
     scoped_weight_source = std::move(options_impl->scoped_weight_source);
   }
   weight_loader_ = weight_loader::CreateLiteRtWeightLoader(
       fb_model_->GetModel(), model_directory_, std::move(scoped_weight_source));
-  if (options_impl != nullptr) {
-    options_impl->weight_loader = weight_loader_.get();
-  }
+  has_external_weights_ = false;
   if (weight_loader_) {
+    auto weight_infos = weight_loader_->GetWeightInfo();
+    has_external_weights_ = !weight_infos.empty();
+    if (!has_external_weights_) {
+      LITERT_LOG(LITERT_DEBUG,
+                 "External weight loader: no external weight tensors found");
+      return {};
+    }
     weight_loader::WeightAccessRequest request;
     request.cpu = true;
     // TODO(b/456318365): Handle weight access request to support multiple
@@ -413,8 +485,12 @@ Expected<void> LiteRtCompiledModelT::InitializeRuntime(
       return litert::Unexpected(kLiteRtStatusErrorRuntimeFailure,
                                 std::string(prepare_status.message()));
     }
+
+    if (options_impl != nullptr) {
+      options_impl->weight_loader = weight_loader_.get();
+    }
+
     // Inspect the weight infos to log the available weights for GPU delegates.
-    auto weight_infos = weight_loader_->GetWeightInfo();
     LITERT_LOG(LITERT_DEBUG,
                "External weight loader: %zu weight tensors available for GPU "
                "delegates",
@@ -432,13 +508,11 @@ Expected<void> LiteRtCompiledModelT::InitializeRuntime(
       }
     }
   }
-#endif  // defined(LITERT_WITH_EXTERNAL_WEIGHT_LOADER)
   return {};
 }
 
-#if defined(LITERT_WITH_EXTERNAL_WEIGHT_LOADER)
 Expected<void> LiteRtCompiledModelT::RestoreExternalWeightsForCpu() {
-  if (!weight_loader_) {
+  if (!weight_loader_ || !has_external_weights_) {
     return {};
   }
 
@@ -503,7 +577,6 @@ Expected<void> LiteRtCompiledModelT::RestoreExternalWeightsForCpu() {
   }
   return {};
 }
-#endif  // defined(LITERT_WITH_EXTERNAL_WEIGHT_LOADER)
 
 namespace {
 
@@ -684,9 +757,9 @@ class ScopedCompilationOptionsModifier {
 
 }  // namespace
 
-Expected<LiteRtCompiledModelT::Ptr> LiteRtCompiledModelT::Create(
-    LiteRtEnvironmentT* env, LiteRtModel model,
-    LiteRtOptions jit_compilation_options) {
+LITERT_NO_CFI_CHECK Expected<LiteRtCompiledModelT::Ptr>
+LiteRtCompiledModelT::Create(LiteRtEnvironmentT* env, LiteRtModel model,
+                             LiteRtOptions jit_compilation_options) {
   if (!jit_compilation_options) {
     return litert::ErrorStatusBuilder::InvalidArgument()
            << "No compilation options passed.";
@@ -702,6 +775,22 @@ Expected<LiteRtCompiledModelT::Ptr> LiteRtCompiledModelT::Create(
     return litert::ErrorStatusBuilder::InvalidArgument()
            << "No acceleration provided.";
   }
+
+#if defined(LITERT_ENABLE_FABRIC_INTEGRATION)
+  {
+    auto opaque_options = litert::OpaqueOptions::WrapCObject(
+        jit_compilation_options->options, litert::OwnHandle::kNo);
+    if (auto fabric_options = litert::FindOpaqueData<LiteRtFabricOptionsT>(
+            opaque_options, LiteRtFabricOptionsT::Identifier());
+        fabric_options) {
+      LITERT_LOG(LITERT_INFO,
+                 "Fabric options found; initializing Fabric runtime.");
+      LITERT_RETURN_IF_ERROR(compiled_model->InitializeFabricRuntime(
+          jit_compilation_options, **fabric_options));
+      return compiled_model;
+    }
+  }
+#endif  // defined(LITERT_ENABLE_FABRIC_INTEGRATION)
 
   LITERT_RETURN_IF_ERROR(compiled_model->InitializeModel(
       *model, hardware_accelerators, jit_compilation_options, *env));
@@ -726,14 +815,12 @@ Expected<LiteRtCompiledModelT::Ptr> LiteRtCompiledModelT::Create(
     LITERT_RETURN_IF_ERROR(scoped_modifier.Append(std::move(dispatch_options)));
   }
 
-#if defined(LITERT_WITH_EXTERNAL_WEIGHT_LOADER)
   // Load and restore external weights for CPU execution before delegates are
   // applied. This ensures that XNNPack and other CPU delegates can see the
   // weight data.
   if (hardware_accelerators & kLiteRtHwAcceleratorCpu) {
     LITERT_RETURN_IF_ERROR(compiled_model->RestoreExternalWeightsForCpu());
   }
-#endif  // defined(LITERT_WITH_EXTERNAL_WEIGHT_LOADER)
 
   // Apply accelerators matching the requested hardware support to the
   // model in the order they were registered.
@@ -768,14 +855,21 @@ Expected<LiteRtCompiledModelT::Ptr> LiteRtCompiledModelT::Create(
 
     LiteRtDelegateWrapper delegate_wrapper = nullptr;
     LITERT_RETURN_IF_ERROR(accelerator->CreateDelegate(
-        accelerator.get(), jit_compilation_options, &delegate_wrapper));
+        LrtGetRuntimeContext(), env, accelerator.get(), jit_compilation_options,
+        &delegate_wrapper));
+    if (delegate_wrapper == nullptr) {
+      continue;
+    }
 
     TfLiteOpaqueDelegate* delegate_ptr = nullptr;
-    LiteRtUnwrapDelegate(delegate_wrapper, &delegate_ptr);
+    LrtGetRuntimeContext()->unwrap_delegate(delegate_wrapper, &delegate_ptr);
 
     auto delegate = std::unique_ptr<LiteRtDelegateWrapperT,
                                     std::function<void(LiteRtDelegateWrapper)>>{
-        delegate_wrapper, accelerator->DestroyDelegate};
+        delegate_wrapper, [destroy_fn = accelerator->DestroyDelegate](
+                              LiteRtDelegateWrapper wrapper) {
+          if (destroy_fn) destroy_fn(LrtGetRuntimeContext(), wrapper);
+        }};
 
     if (compiled_model->interp_->ModifyGraphWithDelegate(delegate_ptr) !=
         kTfLiteOk) {
@@ -802,6 +896,11 @@ Expected<LiteRtCompiledModelT::Ptr> LiteRtCompiledModelT::Create(
 }
 
 Expected<bool> LiteRtCompiledModelT::HasNonDelegatedOps() {
+#if defined(LITERT_ENABLE_FABRIC_INTEGRATION)
+  if (fabric_runtime_) {
+    return false;
+  }
+#endif  // defined(LITERT_ENABLE_FABRIC_INTEGRATION)
   for (int subgraph_no = 0; subgraph_no < interp_->subgraphs_size();
        ++subgraph_no) {
     const auto* const subgraph = interp_->subgraph(subgraph_no);
@@ -960,6 +1059,13 @@ bool LiteRtCompiledModelT::TryLoadingFromCache(uint64_t model_hash) {
 
 Expected<const LiteRtTensorBufferRequirementsT*>
 LiteRtCompiledModelT::GetTensorBufferRequirements(const TfLiteTensor* tensor) {
+#if defined(LITERT_ENABLE_FABRIC_INTEGRATION)
+  if (fabric_runtime_) {
+    return Unexpected(kLiteRtStatusErrorUnsupported,
+                      "Tensor buffer requirements are not supported for "
+                      "Fabric runtime.");
+  }
+#endif  // defined(LITERT_ENABLE_FABRIC_INTEGRATION)
   LITERT_ASSIGN_OR_RETURN(const auto tensor_id,
                           GetTensorIdentifier(*interp_, tensor));
   // Use the buffer context to get the buffer requirements only if the tensor
@@ -985,12 +1091,18 @@ LiteRtCompiledModelT::GetTensorBufferRequirements(const TfLiteTensor* tensor) {
       /*num_strides=*/1, cpu_buffer_strides, &litert_cpu_buffer_requirements));
   cpu_buffer_requirements_[tensor_id] =
       LiteRtTensorBufferRequirementsPtr(litert_cpu_buffer_requirements);
-  return litert_cpu_buffer_requirements;
+  return const_cast<LiteRtTensorBufferRequirementsT*>(
+      litert_cpu_buffer_requirements);
 }
 
 Expected<const LiteRtTensorBufferRequirementsT*>
 LiteRtCompiledModelT::GetInputBufferRequirements(
     absl::string_view signature_key, size_t input_index) {
+#if defined(LITERT_ENABLE_FABRIC_INTEGRATION)
+  if (fabric_runtime_) {
+    return GetFabricInputBufferRequirements(signature_key, input_index);
+  }
+#endif  // defined(LITERT_ENABLE_FABRIC_INTEGRATION)
   auto runner = GetSignatureRunner(signature_key);
   if (runner == nullptr) {
     return Unexpected(kLiteRtStatusErrorNotFound,
@@ -1012,6 +1124,11 @@ LiteRtCompiledModelT::GetInputBufferRequirements(
 Expected<const LiteRtTensorBufferRequirementsT*>
 LiteRtCompiledModelT::GetOutputBufferRequirements(
     absl::string_view signature_key, size_t output_index) {
+#if defined(LITERT_ENABLE_FABRIC_INTEGRATION)
+  if (fabric_runtime_) {
+    return GetFabricOutputBufferRequirements(signature_key, output_index);
+  }
+#endif  // defined(LITERT_ENABLE_FABRIC_INTEGRATION)
   auto runner = GetSignatureRunner(signature_key);
   if (runner == nullptr) {
     return Unexpected(kLiteRtStatusErrorNotFound,
@@ -1033,6 +1150,11 @@ LiteRtCompiledModelT::GetOutputBufferRequirements(
 
 Expected<LiteRtLayout> LiteRtCompiledModelT::GetInputTensorLayout(
     size_t signature_index, size_t input_index) {
+#if defined(LITERT_ENABLE_FABRIC_INTEGRATION)
+  if (fabric_runtime_) {
+    return GetFabricInputTensorLayout(signature_index, input_index);
+  }
+#endif  // defined(LITERT_ENABLE_FABRIC_INTEGRATION)
   if (signature_index >= signature_keys_.size()) {
     return Unexpected(kLiteRtStatusErrorIndexOOB,
                       "Signature index is out of range of signature keys");
@@ -1072,9 +1194,85 @@ Expected<LiteRtLayout> LiteRtCompiledModelT::GetInputTensorLayout(
   return layout;
 }
 
+#if defined(LITERT_ENABLE_FABRIC_INTEGRATION)
+Expected<LiteRtRankedTensorType>
+LiteRtCompiledModelT::GetRuntimeOutputTensorType(size_t signature_index,
+                                                 size_t output_index) {
+  if (signature_index >= signature_keys_.size()) {
+    return Unexpected(kLiteRtStatusErrorIndexOOB,
+                      "Signature index is out of range of signature keys");
+  }
+  const absl::string_view signature_key = *signature_keys_[signature_index];
+  if (fabric_runtime_) {
+    return GetFabricRuntimeOutputTensorType(signature_key, output_index);
+  }
+  auto* runner = GetSignatureRunner(signature_key);
+  if (runner == nullptr) {
+    return Unexpected(kLiteRtStatusErrorInvalidArgument,
+                      "Failed to get signature runner");
+  }
+  const auto& output_names = runner->subgraph_output_names();
+  if (output_index >= output_names.size()) {
+    return Unexpected(kLiteRtStatusErrorIndexOOB, "Output index out of range");
+  }
+  auto* output_tensor = runner->output_tensor(output_names[output_index]);
+  if (output_tensor == nullptr) {
+    return Unexpected(kLiteRtStatusErrorNotFound,
+                      "Failed to get output tensor");
+  }
+  LiteRtElementType element_type = kLiteRtElementTypeNone;
+  switch (output_tensor->type) {
+    case kTfLiteBool:
+      element_type = kLiteRtElementTypeBool;
+      break;
+    case kTfLiteInt32:
+      element_type = kLiteRtElementTypeInt32;
+      break;
+    case kTfLiteInt64:
+      element_type = kLiteRtElementTypeInt64;
+      break;
+    case kTfLiteUInt8:
+      element_type = kLiteRtElementTypeUInt8;
+      break;
+    case kTfLiteUInt32:
+      element_type = kLiteRtElementTypeUInt32;
+      break;
+    case kTfLiteUInt64:
+      element_type = kLiteRtElementTypeUInt64;
+      break;
+    case kTfLiteBFloat16:
+      element_type = kLiteRtElementTypeBFloat16;
+      break;
+    case kTfLiteFloat32:
+      element_type = kLiteRtElementTypeFloat32;
+      break;
+    case kTfLiteFloat64:
+      element_type = kLiteRtElementTypeFloat64;
+      break;
+    default:
+      return Unexpected(kLiteRtStatusErrorUnsupported,
+                        "Unsupported runtime output tensor type");
+  }
+  std::vector<LiteRtLayout> output_layouts(output_names.size());
+  auto output_layouts_span = absl::MakeSpan(output_layouts);
+  LITERT_RETURN_IF_ERROR(GetOutputTensorShapes(signature_key,
+                                               output_layouts_span,
+                                               /*update_allocation=*/false));
+  return LiteRtRankedTensorType{
+      .element_type = element_type,
+      .layout = output_layouts[output_index],
+  };
+}
+#endif  // defined(LITERT_ENABLE_FABRIC_INTEGRATION)
+
 Expected<void> LiteRtCompiledModelT::GetOutputTensorShapes(
     absl::string_view signature_key, absl::Span<LiteRtLayout>& output_layouts,
     bool update_allocation) {
+#if defined(LITERT_ENABLE_FABRIC_INTEGRATION)
+  if (fabric_runtime_) {
+    return GetFabricOutputTensorShapes(signature_key, output_layouts);
+  }
+#endif  // defined(LITERT_ENABLE_FABRIC_INTEGRATION)
   auto runner = GetSignatureRunner(signature_key);
   if (runner == nullptr) {
     return Unexpected(kLiteRtStatusErrorNotFound,
@@ -1115,6 +1313,9 @@ Expected<void> LiteRtCompiledModelT::GetOutputTensorShapes(
 
 tflite::SignatureRunner* LiteRtCompiledModelT::GetSignatureRunner(
     absl::string_view signature_key) {
+  if (!interp_) {
+    return nullptr;
+  }
   if (signature_runners_.contains(signature_key)) {
     return signature_runners_[signature_key];
   }
@@ -1354,6 +1555,12 @@ Expected<void> LiteRtCompiledModelT::Run(
     const std::vector<LiteRtTensorBuffer>& input_buffers,
     const std::vector<LiteRtTensorBuffer>& output_buffers, bool& async,
     LiteRtOptions run_options, const LiteRtSchedulingInfo* scheduling_info) {
+#if defined(LITERT_ENABLE_FABRIC_INTEGRATION)
+  if (fabric_runtime_) {
+    return RunWithFabric(signature_key, input_buffers, output_buffers, async);
+  }
+#endif  // defined(LITERT_ENABLE_FABRIC_INTEGRATION)
+
   uint64_t event_handle = std::numeric_limits<uint64_t>::max();
   if (profiler_ && profiler_->IsProfiling()) {
     profiler_->SetCurrentEventSource(LITERT);
@@ -1584,7 +1791,8 @@ Expected<void> LiteRtCompiledModelT::RunCApi(
   return result;
 }
 
-Expected<void> LiteRtCompiledModelT::StartMetricsCollection(int detail_level) {
+Expected<void> LiteRtCompiledModelT::StartMetricsCollection(
+    int detail_level) const {
   if (detail_level < 0) {
     return Unexpected(kLiteRtStatusErrorInvalidArgument,
                       "Detail level must be >= 0");
@@ -1592,19 +1800,20 @@ Expected<void> LiteRtCompiledModelT::StartMetricsCollection(int detail_level) {
   for (auto& delegate : delegates_) {
     if (delegate.StartMetricsCollection) {
       LITERT_RETURN_IF_ERROR(delegate.StartMetricsCollection(
-          delegate.delegate.get(), detail_level));
+          LrtGetRuntimeContext(), delegate.delegate.get(), detail_level));
     }
   }
   return {};
 }
 
-Expected<LiteRtMetricsT> LiteRtCompiledModelT::StopMetricsCollection() {
+Expected<LiteRtMetricsT> LiteRtCompiledModelT::StopMetricsCollection() const {
   std::vector<LiteRtMetricsT::Metric> metrics;
   for (auto& delegate : delegates_) {
     if (delegate.StopMetricsCollection) {
       LiteRtMetricsT accelerator_metrics;
       LITERT_RETURN_IF_ERROR(delegate.StopMetricsCollection(
-          delegate.delegate.get(), &accelerator_metrics));
+          LrtGetRuntimeContext(), delegate.delegate.get(),
+          &accelerator_metrics));
       metrics.insert(
           metrics.end(),
           std::make_move_iterator(accelerator_metrics.metrics.begin()),
@@ -1711,6 +1920,13 @@ Expected<void> LiteRtCompiledModelT::ResizeInputTensorNonStrict(
 Expected<void> LiteRtCompiledModelT::ResizeInputTensorImpl(
     size_t signature_index, size_t input_index, absl::Span<const int> dims,
     bool strict_mode) {
+#if defined(LITERT_ENABLE_FABRIC_INTEGRATION)
+  if (fabric_runtime_) {
+    return litert::Unexpected(kLiteRtStatusErrorUnsupported,
+                              "ResizeInputTensor is not supported for Fabric "
+                              "runtime.");
+  }
+#endif  // defined(LITERT_ENABLE_FABRIC_INTEGRATION)
   if (signature_index >= signature_keys_.size()) {
     return Unexpected(kLiteRtStatusErrorIndexOOB,
                       "Signature index is out of range of signature keys");
@@ -1838,7 +2054,7 @@ void LiteRtCompiledModelT::ReportError(const char* format, ...) {
   va_end(args);
 }
 
-Expected<void> LiteRtCompiledModelT::ClearErrors() {
+Expected<void> LiteRtCompiledModelT::ClearErrors() const {
   if (!error_reporter_) {
     return Unexpected(kLiteRtStatusErrorInvalidArgument,
                       "No error reporter configured");
@@ -1856,7 +2072,7 @@ Expected<void> LiteRtCompiledModelT::ClearErrors() {
   return {};
 }
 
-Expected<std::string> LiteRtCompiledModelT::GetErrorMessages() {
+Expected<std::string> LiteRtCompiledModelT::GetErrorMessages() const {
   if (!error_reporter_) {
     return Unexpected(kLiteRtStatusErrorInvalidArgument,
                       "No error reporter configured");
@@ -1885,6 +2101,9 @@ void LiteRtCompiledModelT::SetCancellationFunction(
     absl::AnyInvocable<bool()> check_cancelled_func) {
   check_cancelled_func_cpp_ = std::move(check_cancelled_func);
   check_cancelled_func_ = nullptr;
+  if (!interp_) {
+    return;
+  }
   interp_->SetCancellationFunction(this, &CheckCancelledWrapper);
 }
 
@@ -1894,6 +2113,9 @@ void LiteRtCompiledModelT::SetCancellationFunction(
   check_cancelled_func_cpp_ = nullptr;
 
   // Set the cancellation function on the underlying TFLite interpreter
+  if (!interp_) {
+    return;
+  }
   interp_->SetCancellationFunction(data, check_cancelled_func);
 }
 

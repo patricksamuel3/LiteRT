@@ -27,6 +27,14 @@ http_archive(
     ],
 )
 
+# Lower the version from 1.24.5 that tensorflow uses to 1.23.1, the highest version which don't have
+# issues with missing LC_UUID, DEVELOPER_DIR or SDKROOT on MacOS Tahoe.
+http_archive(
+    name = "build_bazel_apple_support",
+    sha256 = "ee20cc5c0bab47065473c8033d462374dd38d172406ecc8de5c8f08487943f2f",
+    url = "https://github.com/bazelbuild/apple_support/releases/download/1.23.1/apple_support.1.23.1.tar.gz",
+)
+
 # Download coremltools of the same version of tensorflow, but with a custom patchcmd until
 # tensorflow is updated to do the same patchcmd.
 http_archive(
@@ -46,9 +54,11 @@ load("//litert:tensorflow_source_rules.bzl", "tensorflow_source_repo")
 
 tensorflow_source_repo(
     name = "org_tensorflow",
-    sha256 = "3a26196b1a9cee6e56a17f2334b0be32c23c4a7367648cae942b217091728a98",
-    strip_prefix = "tensorflow-f2d8e35dc5369fb4002f57d95303eb551e85f138",
-    urls = ["https://github.com/tensorflow/tensorflow/archive/f2d8e35dc5369fb4002f57d95303eb551e85f138.tar.gz"],
+    patches = ["//:PATCH.tf_xla_tsl_win_copts"],
+    protobuf_patches = ["//:PATCH.protobuf_port_msvc_compat"],
+    sha256 = "7874a34f94059ba193a6482c8f5d0e93dbae18cbb2c0a9f25f95b22432abbc4d",
+    strip_prefix = "tensorflow-336096726d7707656a3700622436c21379c2b10b",
+    urls = ["https://github.com/tensorflow/tensorflow/archive/336096726d7707656a3700622436c21379c2b10b.tar.gz"],
 )
 
 # Initialize the TensorFlow repository and all dependencies.
@@ -359,3 +369,8 @@ litert_prebuilts()
 load("//third_party/intel_openvino:openvino.bzl", "openvino_configure")
 
 openvino_configure()
+
+# SAMSUNG EXYNOS ----------------------------------------------------------------------------------
+load("//third_party/exynos_ai_litecore:workspace.bzl", "exynos_ai_litecore")
+
+exynos_ai_litecore()

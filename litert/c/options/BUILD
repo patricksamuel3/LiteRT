@@ -32,10 +32,10 @@ cc_library(
     hdrs = ["litert_cpu_options.h"],
     deps = [
         "//litert/c:litert_common",
-        "//litert/c:litert_opaque_options",
+        "//litert/c/internal:litert_options_helper",
         "//litert/cc:litert_macros",
-        "//litert/runtime:litert_cpu_options",
-        "//tflite/delegates/xnnpack:xnnpack_delegate",
+        "@com_google_absl//absl/strings",
+        "@com_google_absl//absl/strings:str_format",
     ],
 )
 
@@ -60,6 +60,7 @@ cc_library(
     hdrs = ["litert_compiler_options.h"],
     deps = [
         "//litert/c:litert_common",
+        "//litert/c/internal:litert_options_helper",
     ],
 )
 
@@ -84,9 +85,9 @@ cc_library(
     hdrs = ["litert_qualcomm_options.h"],
     deps = [
         "//litert/c:litert_common",
-        "//litert/c:litert_opaque_options",
-        "//litert/cc:litert_macros",
-        "//litert/core/cache:hash_util",
+        "//litert/c/internal:litert_options_helper",
+        "//litert/cc:litert_common",
+        "//litert/core:litert_toml_parser",
         "@com_google_absl//absl/strings:string_view",
     ],
     # Keep the symbols in libLiteRt.dylib.
@@ -103,6 +104,7 @@ cc_test(
         "//litert/cc:litert_opaque_options",
         "//litert/cc/options:litert_qualcomm_options",
         "//litert/test:matchers",
+        "@com_google_absl//absl/strings:string_view",
         "@com_google_googletest//:gtest_main",
     ],
 )
@@ -116,11 +118,10 @@ cc_library(
     deps = [
         ":litert_google_tensor_options_type",
         "//litert/c:litert_common",
-        "//litert/c:litert_opaque_options",
+        "//litert/c/internal:litert_options_helper",
         "//litert/cc:litert_macros",
-        "//litert/core/cache:hash_util",
-        "//litert/runtime:litert_google_tensor",
-        "@com_google_absl//absl/strings:string_view",
+        "//litert/core:litert_toml_parser",
+        "@com_google_absl//absl/strings:str_format",
     ],
 )
 
@@ -146,9 +147,10 @@ cc_library(
     hdrs = ["litert_mediatek_options.h"],
     deps = [
         "//litert/c:litert_common",
-        "//litert/c:litert_opaque_options",
+        "//litert/c/internal:litert_options_helper",
         "//litert/cc:litert_macros",
-        "//litert/core/cache:hash_util",
+        "//litert/core:litert_toml_parser",
+        "@com_google_absl//absl/strings:str_format",
         "@com_google_absl//absl/strings:string_view",
     ],
 )
@@ -161,11 +163,42 @@ cc_library(
     hdrs = ["litert_intel_openvino_options.h"],
     deps = [
         "//litert/c:litert_common",
-        "//litert/c:litert_opaque_options",
+        "//litert/c/internal:litert_options_helper",
+        "//litert/cc:litert_common",
+        "//litert/cc:litert_expected",
         "//litert/cc:litert_macros",
-        "//litert/core/cache:hash_util",
+        "//litert/core:litert_toml_parser",
+        "@com_google_absl//absl/strings",
         "@com_google_absl//absl/strings:string_view",
     ],
+)
+
+cc_test(
+    name = "litert_intel_openvino_options_test",
+    srcs = ["litert_intel_openvino_options_test.cc"],
+    deps = [
+        ":litert_intel_openvino_options",
+        "//litert/c:litert_common",
+        "//litert/test:matchers",
+        "@com_google_googletest//:gtest_main",
+    ],
+)
+
+# SAMSUNG ######################################################################################
+
+cc_library(
+    name = "litert_samsung_options",
+    srcs = ["litert_samsung_options.cc"],
+    hdrs = ["litert_samsung_options.h"],
+    deps = [
+        "//litert/c:litert_common",
+        "//litert/c:litert_opaque_options",
+        "//litert/c/internal:litert_options_helper",
+        "//litert/cc:litert_macros",
+        "@com_google_absl//absl/strings:string_view",
+    ],
+    # Keep the symbols in libLiteRtRuntimeCApi.dylib.
+    alwayslink = 1,
 )
 
 cc_library(
@@ -174,9 +207,10 @@ cc_library(
     hdrs = ["litert_gpu_options.h"],
     deps = [
         "//litert/c:litert_common",
-        "//litert/c:litert_opaque_options",
+        "//litert/c/internal:litert_options_helper",
         "//litert/cc:litert_expected",
         "//litert/cc:litert_macros",
+        "//litert/core:litert_toml_parser",
         "@com_google_absl//absl/strings:string_view",
     ],
     # Keep the symbols in libLiteRt.dylib.
@@ -189,13 +223,25 @@ cc_library(
     hdrs = ["litert_webnn_options.h"],
     deps = [
         "//litert/c:litert_common",
-        "//litert/c:litert_opaque_options",
-        "//litert/cc:litert_expected",
+        "//litert/c/internal:litert_options_helper",
         "//litert/cc:litert_macros",
+        "//litert/core:litert_toml_parser",
         "@com_google_absl//absl/strings:string_view",
     ],
     # Keep the symbols in libLiteRt.dylib.
     alwayslink = 1,
+)
+
+cc_test(
+    name = "litert_webnn_options_test",
+    srcs = ["litert_webnn_options_test.cc"],
+    deps = [
+        ":litert_webnn_options",
+        "//litert/c:litert_common",
+        "//litert/test:matchers",
+        "@com_google_absl//absl/strings:string_view",
+        "@com_google_googletest//:gtest_main",
+    ],
 )
 
 cc_library(
@@ -204,12 +250,25 @@ cc_library(
     hdrs = ["litert_runtime_options.h"],
     deps = [
         "//litert/c:litert_common",
-        "//litert/cc:litert_macros",
-        "@com_google_absl//absl/strings",
+        "//litert/c/internal:litert_options_helper",
     ],
     # Keep the symbols in libLiteRt.dylib.
     alwayslink = 1,
 )
+
+# copybara:uncomment_begin(google-only)
+# cc_library(
+#     name = "litert_fabric_options",
+#     srcs = ["fabric/litert_fabric_options.cc"],
+#     hdrs = ["fabric/litert_fabric_options.h"],
+#     deps = [
+#         "//litert/c:litert_common",
+#         "//litert/c:litert_opaque_options",
+#         "//litert/cc:litert_macros",
+#         "//litert/runtime:litert_fabric_options",
+#     ],
+# )
+# copybara:uncomment_end
 
 cc_library(
     name = "litert_google_tensor_options_type",
@@ -241,8 +300,9 @@ cc_test(
         ":litert_mediatek_options",
         "//litert/c:litert_common",
         "//litert/c:litert_opaque_options",
-        "//litert/cc/options:litert_mediatek_options",
         "//litert/test:matchers",
+        "@com_google_absl//absl/strings",
+        "@com_google_absl//absl/strings:string_view",
         "@com_google_googletest//:gtest_main",
     ],
 )
@@ -256,33 +316,6 @@ cc_test(
         "//litert/c:litert_opaque_options",
         "//litert/test:matchers",
         "@com_google_googletest//:gtest_main",
-    ],
-)
-
-cc_test(
-    name = "litert_webnn_options_test",
-    srcs = ["litert_webnn_options_test.cc"],
-    deps = [
-        ":litert_webnn_options",
-        "//litert/c:litert_common",
-        "//litert/c:litert_opaque_options",
-        "//litert/test:matchers",
-        "@com_google_googletest//:gtest_main",
-    ],
-)
-
-# DARWINN ##########################################################################################
-
-cc_library(
-    name = "litert_darwinn_runtime_options",
-    srcs = ["litert_darwinn_runtime_options.cc"],
-    hdrs = ["litert_darwinn_runtime_options.h"],
-    deps = [
-        "//litert/c:litert_common",
-        "//litert/c:litert_opaque_options",
-        "//litert/cc:litert_expected",
-        "//litert/cc:litert_macros",
-        "//litert/runtime:litert_darwinn_options",
     ],
 )
 

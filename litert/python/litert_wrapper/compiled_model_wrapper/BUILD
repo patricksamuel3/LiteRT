@@ -16,7 +16,7 @@ load("@org_tensorflow//tensorflow:tensorflow.default.bzl", "pybind_extension")
 
 # copybara:uncomment load("@org_tensorflow//tensorflow:strict.default.bzl", "py_strict_test")
 load("@rules_cc//cc:cc_library.bzl", "cc_library")
-load("@rules_python//python:py_library.bzl", "py_library")
+load("@xla//third_party/rules_python/python:py_library.bzl", "py_library")
 
 # PROTOBUF_USE_DLLS and ABSL_CONSUME_DLL tell protobuf/absl headers to assume DLL linkage and decorate symbols with __declspec(dllimport).
 # In our build, the pybind module is not consuming prebuilt protobuf/absl DLLs; it’s linking against the static libs
@@ -42,6 +42,7 @@ cc_library(
         "compiled_model_wrapper.h",
     ],
     deps = [
+        "//litert/c:litert_common",
         "//litert/cc:litert_api_with_dynamic_runtime",
         "//litert/cc:litert_environment_options",
         "//litert/python/litert_wrapper/common:litert_wrapper_utils",
@@ -67,6 +68,11 @@ pybind_extension(
     common_lib_packages = ["litert/python"],
     copts = WINDOWS_PYBIND_UNDEFS,
     link_in_framework = True,
+    linkopts = select({
+        "@platforms//os:ios": ["-framework Metal"],
+        "@platforms//os:macos": ["-framework Metal"],
+        "//conditions:default": [],
+    }),
     pytype_srcs = [
         "_pywrap_litert_compiled_model_wrapper.pyi",
     ],
@@ -91,6 +97,7 @@ py_library(
     visibility = ["//visibility:public"],
     deps = [
         ":_pywrap_litert_compiled_model_wrapper",
+        "//litert/python/litert_wrapper/environment_wrapper:environment",
         "//litert/python/litert_wrapper/tensor_buffer_wrapper:tensor_buffer",
     ],
 )
@@ -99,9 +106,6 @@ py_library(
 # py_strict_test(
 #     name = "compiled_model_unit_test",
 #     srcs = ["compiled_model_unit_test.py"],
-#     # Static linking is required because this loads a cc_binary as a shared
-#     # library, which would otherwise create ODR violations.
-#     linking_mode = "static",
 #     tags = [
 #         "no_oss",  # TODO(b/190842754): Enable test in OSS.
 #     ],

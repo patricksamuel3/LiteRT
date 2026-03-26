@@ -12,6 +12,9 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+# copybara:uncomment load("@rules_cc//cc:objc_library.bzl", "objc_library")
+load("@bazel_skylib//lib:selects.bzl", "selects")
+
 # copybara:uncomment_begin(google-only)
 # load("@build_bazel_rules_apple//apple:macos.bzl", "macos_dylib", "macos_unit_test")
 # copybara:uncomment_end_and_comment_begin
@@ -24,8 +27,6 @@ load("@rules_cc//cc:cc_import.bzl", "cc_import")
 load("@rules_cc//cc:cc_library.bzl", "cc_library")
 load("@rules_cc//cc:cc_shared_library.bzl", "cc_shared_library")
 load("@rules_cc//cc:cc_test.bzl", "cc_test")
-
-# copybara:uncomment load("@rules_cc//cc:objc_library.bzl", "objc_library")
 load(
     "//litert/build_common:litert_build_defs.bzl",
     "copy_file",
@@ -33,9 +34,11 @@ load(
     "export_lrt_runtime_only_script",
     "export_lrt_tflite_runtime_linkopt",
     "export_lrt_tflite_runtime_script",
+    "litert_c_api_library",
 )
 load(
     "//litert/build_common:special_rule.bzl",
+    "get_compatible_with_portable",
     "gles_deps",
     "gles_headers",
     "gles_linkopts",
@@ -64,6 +67,7 @@ cc_library(
     name = "litert_common",
     srcs = ["litert_common.cc"],
     hdrs = ["litert_common.h"],
+    compatible_with = get_compatible_with_portable(),
     deps = ["//litert/build_common:build_config"],
 )
 
@@ -79,6 +83,7 @@ cc_test(
 cc_library(
     name = "litert_custom_op_kernel",
     hdrs = ["litert_custom_op_kernel.h"],
+    compatible_with = get_compatible_with_portable(),
     deps = [
         ":litert_common",
         ":litert_layout",
@@ -113,85 +118,65 @@ cc_test(
 cc_library(
     name = "litert_any",
     hdrs = ["litert_any.h"],
+    compatible_with = get_compatible_with_portable(),
 )
 
-cc_library(
+litert_c_api_library(
     name = "litert_metrics",
     srcs = ["litert_metrics.cc"],
     hdrs = ["litert_metrics.h"],
-    deps = [
-        ":litert_any",
-        ":litert_common",
-        "//litert/runtime:metrics",
-    ],
-    # Keep symbols in libLiteRt.dylib.
-    alwayslink = 1,
-)
-
-cc_library(
-    name = "litert_metrics_header",
-    hdrs = ["litert_metrics.h"],
+    # We want `compatible_with = get_compatible_with_portable()` only
+    # for the header target, not for the impl target, to avoid having
+    # to propagage similar `compatible_with` declarations into all the
+    # transitive implementation dependencies.
+    header_kwargs = {"compatible_with": get_compatible_with_portable()},
+    impl_deps = ["//litert/runtime:metrics"],
     deps = [
         ":litert_any",
         ":litert_common",
     ],
 )
 
-cc_library(
-    name = "litert_environment_header",
-    hdrs = ["litert_environment.h"],
-    deps = [
-        ":litert_common",
-        ":litert_environment_options",
-    ],
-)
-
-cc_library(
+litert_c_api_library(
     name = "litert_environment",
     srcs = ["litert_environment.cc"],
     hdrs = ["litert_environment.h"],
-    deps = [
-        ":litert_common",
+    header_deps = [":litert_environment_options_header"],
+    header_kwargs = {"compatible_with": get_compatible_with_portable()},
+    impl_deps = [
         ":litert_environment_options",
+        "@com_google_absl//absl/base:core_headers",
+        "@com_google_absl//absl/synchronization",
+        "@com_google_absl//absl/types:span",
         "//litert/cc:litert_macros",
         "//litert/core:environment",
         "//litert/runtime/accelerators:auto_registration",
-        "@com_google_absl//absl/types:span",
     ] + select({
         "//litert/build_common:build_include_gpu_enabled": [
             "//litert/runtime:gpu_environment",
         ],
         "//conditions:default": [],
     }),
-    # Keep symbols in libLiteRt.dylib.
-    alwayslink = 1,
+    deps = [":litert_common"],
 )
 
-# This target has C API implementation. Shouldn't be used for runtime implementation.
-cc_library(
+litert_c_api_library(
     name = "litert_environment_options",
     srcs = ["litert_environment_options.cc"],
     hdrs = ["litert_environment_options.h"],
-    deps = [
-        ":litert_any",
-        ":litert_common",
-        "//litert/c:litert_custom_tensor_buffer",
-        "//litert/c:litert_tensor_buffer_types",
+    # We want `compatible_with = get_compatible_with_portable()` only
+    # for the header target, not for the impl target, to avoid having
+    # to propagage similar `compatible_with` declarations into all the
+    # transitive implementation dependencies.
+    header_kwargs = {"compatible_with": get_compatible_with_portable()},
+    impl_deps = [
         "//litert/cc:litert_macros",
         "//litert/core:environment_options",
     ],
-)
-
-# The header only taget. It's used for runtime implementation.
-cc_library(
-    name = "litert_environment_options_header",
-    hdrs = ["litert_environment_options.h"],
-    tags = ["avoid_dep"],
     deps = [
         ":litert_any",
         ":litert_common",
-        "//litert/c:litert_custom_tensor_buffer",
-        "//litert/c:litert_tensor_buffer_types",
+        ":litert_custom_tensor_buffer",
     ],
 )
 
@@ -202,7 +187,6 @@ cc_test(
         ":litert_any",
         ":litert_common",
         ":litert_environment",
-        ":litert_environment_header",
         ":litert_environment_options",
         "//litert/core:environment_options",
         "//litert/test:matchers",
@@ -214,12 +198,14 @@ cc_library(
     name = "litert_layout",
     srcs = ["litert_layout.cc"],
     hdrs = ["litert_layout.h"],
+    compatible_with = get_compatible_with_portable(),
     deps = [":litert_common"],
 )
 
 cc_library(
     name = "litert_model_types",
     hdrs = ["litert_model_types.h"],
+    compatible_with = get_compatible_with_portable(),
     deps = [
         ":litert_common",
         ":litert_layout",
@@ -227,44 +213,53 @@ cc_library(
     ],
 )
 
-cc_library(
+litert_c_api_library(
     name = "litert_model",
     srcs = ["litert_model.cc"],
     hdrs = ["litert_model.h"],
-    deps = [
-        ":litert_common",
+    impl_deps = [
         ":litert_layout",
-        ":litert_model_types",
-        ":litert_op_code",
+        "@com_google_absl//absl/strings:string_view",
+        "@com_google_absl//absl/types:span",
         "//litert/build_common:build_config",
         "//litert/c/internal:litert_logging",
         "//litert/cc:litert_buffer_ref",
         "//litert/cc:litert_macros",
+        "//litert/cc:litert_common",
         "//litert/core/model",
+        "//tflite/converter:allocation",
         "//litert/core/model:model_load",
         "//tflite/core/c:private_c_api_types",
-        "@com_google_absl//absl/strings:string_view",
-        "@com_google_absl//absl/types:span",
     ] + select({
         "//litert/build_common:build_include_npu_enabled": [
             "//litert/core/model:model_serialize",
         ],
         "//conditions:default": [],
     }),
+    deps = [
+        ":litert_common",
+        ":litert_model_types",
+        ":litert_op_code",
+    ],
 )
 
 # Flavor aliases for model (NPU serialization gated by flavor)
 cc_test(
     name = "litert_model_test",
     srcs = ["litert_model_test.cc"],
+    data = [
+        "//litert/test:mlir_test_data",
+    ],
     deps = [
         ":litert_common",
         ":litert_model",
         ":litert_op_code",
         "//litert/cc:litert_buffer_ref",
         "//litert/core/model",
-        "//litert/core/util:flatbuffer_tools",
+        "//litert/test:common",
         "//litert/test:matchers",
+        "//tflite:stderr_reporter",
+        "//tflite/converter:allocation",
         "@com_google_absl//absl/strings:string_view",
         "@com_google_absl//absl/types:span",
         "@com_google_googletest//:gtest_main",
@@ -274,23 +269,24 @@ cc_test(
 cc_library(
     name = "litert_op_code",
     hdrs = ["litert_op_code.h"],
+    compatible_with = get_compatible_with_portable(),
 )
 
-cc_library(
+litert_c_api_library(
     name = "litert_op_options",
     srcs = ["litert_op_options.cc"],
     hdrs = ["litert_op_options.h"],
-    deps = [
-        ":litert_common",
+    impl_deps = [
         ":litert_layout",
         ":litert_op_code",
         "//litert/c/internal:litert_logging",
         "//litert/cc:litert_macros",
         "//litert/core/model",
-        "//tflite/c:c_api_types",
         "//tflite/converter/core:model_builder_base",
+        "//tflite/c:c_api_types",
         "//tflite/schema:schema_fbs",
     ],
+    deps = [":litert_common"],
 )
 
 cc_test(
@@ -319,76 +315,102 @@ cc_test(
 cc_library(
     name = "litert_event_type",
     hdrs = ["litert_event_type.h"],
+    compatible_with = get_compatible_with_portable(),
 )
 
-cc_library(
+litert_c_api_library(
     name = "litert_event",
     srcs = ["litert_event.cc"],
     hdrs = ["litert_event.h"],
-    deps = [
-        ":litert_common",
-        ":litert_event_type",
-        ":litert_gl_types",
-        ":litert_opencl_types",
+    impl_deps = [
         "//litert/c/internal:litert_logging",
         "//litert/cc:litert_macros",
         "//litert/runtime:event",
         "//tflite/delegates/gpu/cl:opencl_wrapper",
     ],
-    alwayslink = 1,
+    deps = [
+        ":litert_common",
+        ":litert_event_type",
+        ":litert_gl_types",
+        ":litert_opencl_types",
+    ],
 )
 
 cc_library(
     name = "litert_tensor_buffer_types",
     hdrs = ["litert_tensor_buffer_types.h"],
+    compatible_with = get_compatible_with_portable(),
 )
 
 cc_library(
     name = "litert_gl_types",
     hdrs = ["litert_gl_types.h"],
+    compatible_with = get_compatible_with_portable(),
 )
 
 cc_library(
     name = "litert_opencl_types",
     hdrs = ["litert_opencl_types.h"],
+    compatible_with = get_compatible_with_portable(),
     deps = ["@opencl_headers"],
 )
 
 cc_library(
     name = "litert_webgpu_types",
     hdrs = ["litert_webgpu_types.h"],
+    compatible_with = get_compatible_with_portable(),
 )
 
-cc_library(
+litert_c_api_library(
     name = "litert_tensor_buffer",
     srcs = [
         "litert_tensor_buffer.cc",
-        "litert_tensor_buffer_requirements.cc",
     ],
     hdrs = [
         "litert_tensor_buffer.h",
         "litert_tensor_buffer_requirements.h",
     ],
     copts = litert_metal_opts(),
-    linkopts = litert_android_linkopts() + gles_linkopts() + litert_metal_linkopts(),
-    deps = [
-        ":litert_common",
-        ":litert_custom_tensor_buffer",
+    header_deps = [
+        ":litert_tensor_buffer_requirements_header",
+    ],
+    impl_deps = [
         ":litert_event",
-        ":litert_gl_types",
-        ":litert_model_types",
-        ":litert_opencl_types",
-        ":litert_tensor_buffer_types",
-        ":litert_webgpu_types",
+        "@com_google_absl//absl/types:span",
         "//litert/c/internal:litert_logging",
         "//litert/c/internal:litert_tensor_buffer_registry",  # buildcleaner: keep
         "//litert/cc:litert_expected",
         "//litert/cc:litert_macros",
         "//litert/runtime:tensor_buffer",
-        "@com_google_absl//absl/types:span",
+        "//litert/runtime:tensor_buffer_requirements",
         "@opencl_headers",
+        ":litert_tensor_buffer_requirements",
     ] + gles_deps(),
-    alwayslink = 1,
+    linkopts = litert_android_linkopts() + gles_linkopts() + litert_metal_linkopts(),
+    deps = [
+        ":litert_common",
+        ":litert_custom_tensor_buffer",
+        ":litert_gl_types",
+        ":litert_model_types",
+        ":litert_opencl_types",
+        ":litert_tensor_buffer_types",
+        ":litert_webgpu_types",
+    ],
+)
+
+litert_c_api_library(
+    name = "litert_tensor_buffer_requirements",
+    srcs = ["litert_tensor_buffer_requirements.cc"],
+    hdrs = ["litert_tensor_buffer_requirements.h"],
+    impl_deps = [
+        "//litert/cc:litert_expected",
+        "//litert/cc:litert_macros",
+        "//litert/runtime:tensor_buffer_requirements",
+    ],
+    deps = [
+        ":litert_common",
+        ":litert_tensor_buffer_types",
+    ],
 )
 
 cc_test(
@@ -434,10 +456,10 @@ cc_test(
 #         "//litert/cc:litert_any",
 #         "//litert/cc:litert_layout",
 #         "//litert/runtime:event",
-#         "//litert/runtime/ml_drift_delegate:buffer_handler_vulkan",
-#         "//litert/runtime/ml_drift_delegate:buffer_handler_webgpu",
-#         "//litert/runtime/ml_drift_delegate:shared_vulkan_env",
 #         "//litert/test:matchers",
+#         "//third_party/odml/litert/ml_drift/delegate:buffer_handler_vulkan",
+#         "//third_party/odml/litert/ml_drift/delegate:buffer_handler_webgpu",
+#         "//third_party/odml/litert/ml_drift/delegate:shared_vulkan_env",
 #         "//tflite/delegates/gpu/cl:opencl_wrapper",
 #         "//third_party/vulkan_loader",
 #     ],
@@ -450,23 +472,31 @@ cc_test(
     linkopts = litert_android_linkopts(),
     deps = [
         ":litert_common",
+        ":litert_environment",
         ":litert_tensor_buffer",
         ":litert_tensor_buffer_types",
         "@com_google_googletest//:gtest_main",
     ],
 )
 
-cc_library(
+litert_c_api_library(
     name = "litert_options",
     srcs = ["litert_options.cc"],
     hdrs = ["litert_options.h"],
-    deps = [
-        ":litert_common",
+    # We want `compatible_with = get_compatible_with_portable()` only
+    # for the header target, not for the impl target, to avoid having
+    # to propagage similar `compatible_with` declarations into all the
+    # transitive implementation dependencies.
+    header_kwargs = {"compatible_with": get_compatible_with_portable()},
+    impl_deps = [
         ":litert_opaque_options",
         "//litert/c/internal:litert_logging",
         "//litert/cc:litert_macros",
-        "//litert/cc/internal:litert_handle",
         "//litert/core:options",
+    ],
+    deps = [
+        ":litert_common",
+        ":litert_custom_op_kernel",
     ],
 )
 
@@ -483,27 +513,35 @@ cc_test(
     ],
 )
 
-cc_library(
+litert_c_api_library(
     name = "litert_compiled_model",
     srcs = ["litert_compiled_model.cc"],
     hdrs = ["litert_compiled_model.h"],
-    deps = [
-        ":litert_common",
+    header_deps = [
+        ":litert_environment_header",
+        ":litert_metrics_header",
+        ":litert_tensor_buffer_header",
+    ],
+    impl_deps = [
         ":litert_environment",
-        ":litert_layout",
         ":litert_metrics",
         ":litert_model",
         ":litert_options",
         ":litert_tensor_buffer",
-        "//litert/c/internal:litert_logging",
-        "//litert/c/internal:litert_scheduling_info",
-        "//litert/cc:litert_macros",
-        "//litert/runtime:compiled_model",
-        "//tflite/c:c_api_types",
+        "@com_google_absl//absl/base:core_headers",
+        "@com_google_absl//absl/synchronization",
         "@com_google_absl//absl/types:span",
+        "//litert/c/internal:litert_logging",
+        "//litert/cc:litert_macros",
+        "//litert/cc:litert_common",
+        "//litert/runtime:compiled_model",
     ],
-    # Keep symbols in libLiteRt.dylib.
-    alwayslink = 1,
+    deps = [
+        ":litert_common",
+        ":litert_layout",
+        "//litert/c/internal:litert_scheduling_info",
+        "//tflite/c:c_api_types",
+    ],
 )
 
 cc_test(
@@ -542,6 +580,7 @@ cc_test(
         "//litert/test:testdata/simple_model.tflite",
     ],
     deps = [
+        ":litert_common",
         ":litert_environment_options",
         ":litert_runtime_c_api_shared_lib",
         "//litert/c/internal:litert_logging",
@@ -555,17 +594,15 @@ cc_test(
     ],
 )
 
-cc_library(
+litert_c_api_library(
     name = "litert_opaque_options",
     srcs = ["litert_opaque_options.cc"],
     hdrs = ["litert_opaque_options.h"],
-    deps = [":litert_common"],
-    alwayslink = 1,
-)
-
-cc_library(
-    name = "litert_opaque_options_header",
-    hdrs = ["litert_opaque_options.h"],
+    # We want `compatible_with = get_compatible_with_portable()` only
+    # for the header target, not for the impl target, to avoid having
+    # to propagage similar `compatible_with` declarations into all the
+    # transitive implementation dependencies.
+    header_kwargs = {"compatible_with": get_compatible_with_portable()},
     deps = [":litert_common"],
 )
 
@@ -586,6 +623,7 @@ cc_test(
 cc_library(
     name = "litert_custom_tensor_buffer",
     hdrs = ["litert_custom_tensor_buffer.h"],
+    compatible_with = get_compatible_with_portable(),
     deps = [
         ":litert_common",
         ":litert_model_types",
@@ -599,16 +637,18 @@ cc_library(
     deps = [":litert_common"],
 )
 
-cc_library(
+litert_c_api_library(
     name = "litert_profiler",
     srcs = ["litert_profiler.cc"],
     hdrs = ["litert_profiler.h"],
-    deps = [
-        ":litert_common",
-        ":litert_profiler_event",
+    impl_deps = [
         "//litert/cc:litert_macros",
         "//litert/runtime:compiled_model",
         "//litert/runtime:profiler",
+    ],
+    deps = [
+        ":litert_common",
+        ":litert_profiler_event",
     ],
 )
 
@@ -677,21 +717,21 @@ filegroup(
 LITERT_C_API_COMMON_DEPS = [
     ":litert_any",
     ":litert_common",
-    ":litert_compiled_model",
+    ":litert_compiled_model_impl",
     ":litert_custom_tensor_buffer",
-    ":litert_options",
-    ":litert_event",
-    ":litert_environment",
+    ":litert_options_impl",
+    ":litert_event_impl",
+    ":litert_environment_impl",
     ":litert_layout",
-    ":litert_metrics",
-    ":litert_model",
+    ":litert_metrics_impl",
+    ":litert_model_impl",
     ":litert_model_types",
     ":litert_op_code",
     ":litert_op_options",
-    ":litert_opaque_options",
-    ":litert_profiler",
+    ":litert_opaque_options_impl",
+    ":litert_profiler_impl",
     ":litert_builder",
-    ":litert_tensor_buffer",
+    ":litert_tensor_buffer_impl",
     "//litert/c/internal:litert_accelerator_registration",
     "//litert/c/internal:litert_accelerator",
     "//litert/c/internal:litert_dispatch_delegate",
@@ -699,13 +739,14 @@ LITERT_C_API_COMMON_DEPS = [
     "//litert/c/internal:litert_logging",
     "//litert/c/internal:litert_tensor_buffer_registry",
     "//litert/c/options:litert_cpu_options",
-    "//litert/c/options:litert_darwinn_runtime_options",
+    # copybara:uncomment "//litert/c/options/google:litert_darwinn_runtime_options",
     "//litert/c/options:litert_google_tensor_options_type",
     "//litert/c/options:litert_google_tensor_options",
     "//litert/c/options:litert_gpu_options",
     "//litert/c/options:litert_mediatek_options",
     "//litert/c/options:litert_qualcomm_options",
     "//litert/c/options:litert_intel_openvino_options",
+    "//litert/c/options:litert_samsung_options",
 ]
 
 # This test verifies that the C API header files can build via C compiler.
@@ -718,6 +759,7 @@ cc_test(
         ":litert_profiler_event",
         "//litert/c/options:litert_compiler_options",
         "//litert/c/options:litert_runtime_options",
+        "//litert/c/options:litert_webnn_options",
     ],
 )
 
@@ -868,10 +910,24 @@ filegroup(
 )
 
 # Config for LiteRT client executables to export LiteRt* symbols and let accelerator shared libs
-# resolve the symbols, not from libLiteRt.so.
 config_setting(
-    name = "resolve_symbols_in_exec",
+    name = "resolve_symbols_in_exec_define",
     define_values = {"resolve_symbols_in_exec": "true"},
+)
+
+config_setting(
+    name = "resolve_symbols_in_exec_flag",
+    flag_values = {"//litert/build_common:resolve_symbols_in_exec": "true"},
+)
+
+# Config for LiteRT client executables to export LiteRt* symbols and let accelerator shared libs
+# resolve the symbols, not from libLiteRt.so.
+selects.config_setting_group(
+    name = "resolve_symbols_in_exec",
+    match_any = [
+        ":resolve_symbols_in_exec_define",
+        ":resolve_symbols_in_exec_flag",
+    ],
 )
 
 config_setting(
@@ -882,7 +938,10 @@ config_setting(
 
 filegroup(
     name = "c_api_headers",
-    srcs = glob(["litert_*.h"]),
+    srcs = glob(
+        ["litert_*.h"],
+        exclude = ["litert_common.h"],
+    ),
     visibility = ["//litert/cc:__pkg__"],
 )
 
@@ -904,7 +963,10 @@ cc_library(
         "//conditions:default": [],
     }),
     linkstatic = 1,
+    # Make the target public to allow clients to bundle libLiteRt.so
+    visibility = ["//litert:litert_public"],
     deps = [
+        ":litert_common",
         ":litert_opencl_types",
         ":litert_webgpu_types",
         # only depend on headers

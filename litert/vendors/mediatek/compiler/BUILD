@@ -40,15 +40,11 @@ litert_dynamic_lib(
     deps = [
         ":compile_model",
         ":create_model",
-        "//litert/c:litert_runtime_c_api_shared_lib",
+        "//litert/c:litert_common",
         "//litert/c/internal:litert_logging",
         "//litert/cc:litert_api_with_dynamic_runtime",
         "//litert/cc:litert_expected",
         "//litert/cc:litert_macros",
-        "//litert/cc/dynamic_runtime:litert_extended_model",
-        "//litert/cc/dynamic_runtime:litert_opaque_options",
-        "//litert/cc/dynamic_runtime/options:litert_mediatek_options",
-        "//litert/vendors/cc:options_helper",
         "//litert/vendors/mediatek:neuron_adapter_api",
         "//litert/vendors/mediatek/compiler/legalizations:common_op_legalization",
         "//litert/vendors/mediatek/compiler/legalizations:operand_map",
@@ -65,6 +61,7 @@ cc_library(
     srcs = ["create_model.cc"],
     hdrs = ["create_model.h"],
     deps = [
+        "//litert/c:litert_common",
         "//litert/c:litert_runtime_c_api_shared_lib",
         "//litert/c/internal:litert_logging",
         "//litert/cc:litert_expected",
@@ -94,7 +91,6 @@ cc_library(
         "//litert/vendors/mediatek/compiler/legalizations:sub_op_legalization",
         "//litert/vendors/mediatek/compiler/legalizations:transpose_conv_op_legalization",
         "//litert/vendors/mediatek/compiler/legalizations:transpose_op_legalization",
-        "//litert/vendors/mediatek/schema:mediatek_litert_schema",
         "@neuro_pilot//:v8_latest_host_headers",
     ],
 )
@@ -109,10 +105,10 @@ cc_library(
         "//conditions:default": [],
     }),
     deps = [
+        "//litert/c:litert_common",
         "//litert/c:litert_runtime_c_api_shared_lib",
         "//litert/c/internal:litert_logging",
         "//litert/cc:litert_expected",
-        "//litert/cc/dynamic_runtime/options:litert_mediatek_options",
         "//litert/vendors/mediatek:neuron_adapter_api",
         "@neuro_pilot//:v8_latest_host_headers",
     ],
@@ -153,6 +149,7 @@ litert_test(
     use_sys_malloc = True,
     deps = [
         ":compiler_plugin",  # buildcleaner: keep
+        "//litert/c:litert_common",
         "//litert/c:litert_runtime_c_api_shared_lib",
         "//litert/c/internal:litert_logging",
         "//litert/cc:litert_expected",

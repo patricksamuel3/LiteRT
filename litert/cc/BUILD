@@ -17,7 +17,7 @@ load("@rules_cc//cc:cc_test.bzl", "cc_test")
 
 # copybara:uncomment load("@rules_cc//cc:objc_library.bzl", "objc_library")
 load("//litert/build_common:litert_build_defs.bzl", "cc_library_with_testonly_vis")
-load("//litert/build_common:special_rule.bzl", "gles_headers", "gles_linkopts", "litert_android_linkopts")
+load("//litert/build_common:special_rule.bzl", "get_compatible_with_portable", "gles_headers", "gles_linkopts", "litert_android_linkopts")
 load("//litert/integration_test:litert_device.bzl", "litert_device_exec", "litert_device_test")
 # copybara:uncomment load("@build_bazel_rules_apple//apple:ios.bzl", "ios_unit_test")
 # copybara:uncomment load("@build_bazel_rules_apple//apple:macos.bzl", "macos_unit_test")
@@ -47,7 +47,9 @@ package(
 cc_library(
     name = "litert_any",
     hdrs = ["litert_any.h"],
+    compatible_with = get_compatible_with_portable(),
     deps = [
+        ":litert_common",
         ":litert_expected",
         ":litert_macros",
         "//litert/c:litert_any",
@@ -97,6 +99,7 @@ cc_test(
 cc_library(
     name = "litert_common",
     hdrs = ["litert_common.h"],
+    compatible_with = get_compatible_with_portable(),
     deps = [
         "//litert/c:litert_common",
     ],
@@ -106,11 +109,14 @@ cc_library(
     name = "litert_macros",
     srcs = ["litert_macros.cc"],
     hdrs = ["litert_macros.h"],
+    compatible_with = get_compatible_with_portable(),
     deps = [
+        ":litert_common",
         ":litert_expected",
         "//litert/c:litert_common",
         "//litert/c/internal:litert_logging",
         "//litert/cc/internal:litert_source_location",
+        "@com_google_absl//absl/log:absl_check",
         "@com_google_absl//absl/status",
         "@com_google_absl//absl/status:statusor",
     ],
@@ -120,6 +126,7 @@ cc_test(
     name = "litert_macros_test",
     srcs = ["litert_macros_test.cc"],
     deps = [
+        ":litert_common",
         ":litert_expected",
         ":litert_macros",
         "//litert/c:litert_common",
@@ -134,10 +141,10 @@ cc_test(
 cc_library(
     name = "litert_expected",
     hdrs = ["litert_expected.h"],
+    compatible_with = get_compatible_with_portable(),
     deps = [
         "//litert/c:litert_common",
         "//litert/cc:litert_common",
-        "//litert/cc/internal:litert_detail",
         "@com_google_absl//absl/log:absl_check",
         "@com_google_absl//absl/strings",
         "@com_google_absl//absl/strings:str_format",
@@ -149,6 +156,7 @@ cc_test(
     srcs = ["litert_expected_test.cc"],
     deps = [
         ":litert_buffer_ref",
+        ":litert_common",
         ":litert_expected",
         "//litert/c:litert_common",
         "@com_google_absl//absl/strings",
@@ -206,6 +214,7 @@ cc_library(
         ":litert_macros",
         "//litert/c:litert_common",
         "//litert/c:litert_opaque_options",
+        "//litert/cc:litert_common",
         "//litert/cc/internal:litert_handle",
         "@com_google_absl//absl/strings:string_view",
     ],
@@ -215,6 +224,7 @@ cc_test(
     name = "litert_opaque_options_test",
     srcs = ["litert_opaque_options_test.cc"],
     deps = [
+        ":litert_common",
         ":litert_expected",
         ":litert_macros",
         ":litert_opaque_options",
@@ -229,7 +239,6 @@ cc_test(
 cc_library(
     name = "litert_environment_options",
     hdrs = ["litert_environment_options.h"],
-    visibility = ["//litert:litert_public"],
     deps = [
         ":litert_any",
         ":litert_common",
@@ -280,7 +289,6 @@ cc_library(
         ":litert_macros",
         ":litert_model_types",
         ":litert_options",
-        ":litert_profiler",
         ":litert_ranked_tensor_type",
         ":litert_tensor_buffer",
         ":litert_tensor_buffer_requirements",
@@ -316,6 +324,7 @@ cc_library(
 #         "@com_google_absl//absl/log:absl_log",
 #         "@com_google_absl//absl/strings:string_view",
 #         "@com_google_absl//absl/types:span",
+#         "//litert/c:litert_common",
 #         "//litert/test:common",
 #         "//litert/test:matchers",
 #         "//litert/test:simple_model",
@@ -337,6 +346,7 @@ litert_device_test(
     ],
     deps = [
         ":litert_api_with_dynamic_runtime",
+        "//litert/c:litert_common",
         "//litert/c/internal:litert_logging",
         "//litert/test:common",
         "//litert/test:matchers",
@@ -368,29 +378,22 @@ litert_device_test(
 #         ":litert_expected",
 #         ":litert_layout",
 #         ":litert_macros",
-#         ":litert_model",
 #         ":litert_options",
-#         ":litert_profiler",
 #         ":litert_ranked_tensor_type",
 #         ":litert_tensor_buffer",
 #         ":litert_tensor_buffer_requirements",
 #         ":litert_tensor_buffer_types",
 #         "@com_google_googletest//:gtest_main",
 #         "@com_google_absl//absl/container:flat_hash_map",
-#         "@com_google_absl//absl/debugging:leak_check",
 #         "@com_google_absl//absl/log:absl_log",
 #         "@com_google_absl//absl/strings:string_view",
 #         "@com_google_absl//absl/types:span",
 #         "//litert/c:litert_common",
-#         "//litert/c:litert_environment_options",
 #         "//litert/c:litert_event",
-#         "//litert/c:litert_event_type",
-#         "//litert/c:litert_profiler_event",
 #         "//litert/c:litert_tensor_buffer",
 #         "//litert/c:litert_tensor_buffer_types",
 #         "//litert/cc/internal:litert_platform_support",
 #         "//litert/cc/options:litert_gpu_options",
-#         "//litert/cc/options:litert_runtime_options",
 #         "//litert/test:common",
 #         "//litert/test:matchers",
 #         "//litert/test:simple_model",
@@ -627,6 +630,7 @@ cc_library(
         "//litert/c:litert_layout",
         "//litert/c:litert_tensor_buffer",
         "//litert/c/internal:litert_logging",
+        "//litert/cc:litert_common",
         "//litert/cc/internal:litert_handle",
         "//litert/cc/internal:litert_tensor_buffer_without_registry",
         "@com_google_absl//absl/types:span",
@@ -681,7 +685,6 @@ cc_test(
         ":litert_expected",
         ":litert_layout",
         ":litert_macros",
-        ":litert_model",
         ":litert_options",
         ":litert_profiler",
         ":litert_ranked_tensor_type",
@@ -721,6 +724,7 @@ cc_library_with_testonly_vis(
     ],
     deps = [
         ":litert_any",
+        ":litert_common",
         ":litert_environment_options",
         ":litert_expected",
         ":litert_macros",
@@ -728,7 +732,6 @@ cc_library_with_testonly_vis(
         "//litert/c:litert_common",
         "//litert/c:litert_environment_options",
         "//litert/cc/internal:litert_handle",
-        "//litert/cc/internal:litert_runtime_builtin",
         "//litert/cc/internal:litert_runtime_proxy",
         "@com_google_absl//absl/types:span",
     ],
@@ -743,13 +746,13 @@ cc_test(
         "//conditions:default": [],
     }),
     deps = [
+        ":litert_any",
         ":litert_common",
         ":litert_compiled_model",
         ":litert_environment",
         ":litert_environment_options",
         ":litert_expected",
-        ":litert_model",
-        "//litert/c:litert_common",
+        "//litert/cc/internal:litert_runtime_builtin_static",
         "//litert/test:common",
         "//litert/test:matchers",
         "//litert/test:simple_model",
@@ -814,6 +817,7 @@ cc_library(
         # copybara:comment_end
     ],
     deps = [
+        ":litert_common",
         ":litert_element_type",
         ":litert_expected",
         ":litert_macros",
@@ -828,6 +832,10 @@ cc_library(
     name = "litert_model",
     srcs = [":litert_model.cc"],
     hdrs = [":litert_model.h"],
+    defines = select({
+        "//litert:litert_runtime_link_mode_dynamic": ["LITERT_DYNAMIC_RUNTIME"],
+        "//conditions:default": [],
+    }),
     visibility = [
         # copybara:uncomment_begin(oss litert_lm)
         # "//litert:litert_cc_users_static_link",
@@ -837,6 +845,7 @@ cc_library(
     ],
     deps = [
         ":litert_buffer_ref",
+        ":litert_common",
         ":litert_element_type",
         ":litert_expected",
         ":litert_macros",
@@ -848,6 +857,8 @@ cc_library(
         "//litert/cc/internal:litert_consts",
         "//litert/cc/internal:litert_detail",
         "//litert/cc/internal:litert_handle",
+        "//litert/core/model:model_load",
+        "//tflite/converter:allocation",
         "@com_google_absl//absl/strings:string_view",
         "@com_google_absl//absl/types:span",
     ],
@@ -864,21 +875,14 @@ cc_library(
         # copybara:comment_end
     ],
     deps = [
-        ":litert_buffer_ref",
+        ":litert_common",
         ":litert_element_type",
         ":litert_expected",
         ":litert_layout",
         ":litert_macros",
-        "//litert/c:litert_common",
         "//litert/c:litert_layout",
         "//litert/c:litert_model_types",
-        "//litert/c:litert_op_code",
-        "//litert/cc/internal:litert_consts",
-        "//litert/cc/internal:litert_detail",
-        "//litert/cc/internal:litert_handle",
-        "@com_google_absl//absl/container:inlined_vector",
         "@com_google_absl//absl/strings:string_view",
-        "@com_google_absl//absl/types:span",
     ],
 )
 
@@ -901,6 +905,10 @@ cc_test(
         "//litert/test:mlir_test_data",
         "//litert/test:tflite_test_data",
     ],
+    defines = select({
+        "//litert:litert_runtime_link_mode_dynamic": ["LITERT_DYNAMIC_RUNTIME"],
+        "//conditions:default": [],
+    }),
     deps = [
         ":litert_element_type",
         ":litert_layout",
@@ -909,9 +917,13 @@ cc_test(
         "//litert/c:litert_layout",
         "//litert/c:litert_model",
         "//litert/c:litert_op_code",
+        "//litert/cc:litert_ranked_tensor_type",
+        "//litert/cc/internal:litert_extended_model",
         "//litert/core/model",
         "//litert/test:common",
         "//litert/test:matchers",
+        "//tflite:stderr_reporter",
+        "//tflite/converter:allocation",
         "@com_google_absl//absl/strings:string_view",
         "@com_google_absl//absl/types:span",
         "@com_google_googletest//:gtest_main",
@@ -929,6 +941,7 @@ cc_library(
         # copybara:comment_end
     ],
     deps = [
+        ":litert_common",
         ":litert_expected",
         ":litert_tensor_buffer_types",
         "//litert/c:litert_common",
@@ -944,6 +957,7 @@ cc_test(
         ":litert_tensor_buffer_requirements",
         ":litert_tensor_buffer_types",
         "//litert/c:litert_common",
+        "//litert/c:litert_environment",  # buildcleaner: keep
         "//litert/c:litert_tensor_buffer",
         "//litert/c:litert_tensor_buffer_types",
         "//litert/cc/internal:litert_handle",
@@ -979,6 +993,7 @@ cc_library(
         "//litert/c:litert_tensor_buffer_types",
         "//litert/c:litert_webgpu_types",
         "//litert/c/internal:litert_tensor_buffer_registry",  # buildcleaner: keep
+        "//litert/cc:litert_common",
         "//litert/cc/internal:litert_handle",
         "//litert/cc/internal:litert_tensor_buffer_without_registry",
         "@com_google_absl//absl/cleanup",
@@ -1009,6 +1024,7 @@ cc_test(
 #     srcs = ["litert_tensor_buffer_test.cc"],
 #     linkopts = litert_android_linkopts(),
 #     deps = [
+#         ":litert_common",
 #         ":litert_element_type",
 #         ":litert_environment",
 #         ":litert_environment_options",
@@ -1080,6 +1096,12 @@ cc_library_with_testonly_vis(
         "//litert/c:litert_options",
         "//litert/c/internal:litert_logging",
         "//litert/c/options:litert_compiler_options",
+        "//litert/c/options:litert_cpu_options",
+        "//litert/c/options:litert_google_tensor_options",
+        "//litert/c/options:litert_gpu_options",
+        "//litert/c/options:litert_intel_openvino_options",
+        "//litert/c/options:litert_mediatek_options",
+        "//litert/c/options:litert_qualcomm_options",
         "//litert/c/options:litert_runtime_options",
         "//litert/cc/internal:litert_handle",
         "//litert/cc/internal:scoped_file",
@@ -1104,10 +1126,10 @@ cc_test(
         "//litert/test:tflite_test_data",
     ],
     deps = [
-        ":litert_common",
         ":litert_compiled_model",
         ":litert_environment",
         ":litert_options",
+        "//litert/cc/internal:litert_compiled_model_next",
         "//litert/test:common",
         "//litert/test:simple_model",
         "@com_google_absl//absl/strings",
@@ -1129,8 +1151,8 @@ cc_library(
         ":litert_expected",
         ":litert_macros",
         "//litert/c:litert_common",
+        "//litert/c:litert_profiler",
         "//litert/c:litert_profiler_event",
-        "//litert/cc:litert_environment",
         "//litert/cc/internal:litert_handle",
     ],
 )
@@ -1176,6 +1198,7 @@ cc_library(
 #     minimum_os_version = LITERT_MIN_IOS_VERSION,
 #     runner = "@build_bazel_rules_apple//apple/testing/default_runner:ios_default_runner",
 #     tags = [
+#         "manual",
 #         "nobuilder",
 #         "notap",
 #     ],
@@ -1192,7 +1215,10 @@ cc_library(
 #     name = "litert_compiled_model_metal_test_cc_ios",
 #     minimum_os_version = LITERT_MIN_IOS_VERSION,
 #     # copybara:uncomment runner = "@build_bazel_rules_apple//apple/testing/default_runner:ios_default_runner",
-#     tags = ["notap"],
+#     tags = [
+#         "manual",
+#         "notap",
+#     ],
 #     deps = [":litert_compiled_model_metal_test"],
 # )
 # copybara:uncomment_end(google-only)
@@ -1276,45 +1302,45 @@ cc_library(
         "//litert/cc/dynamic_runtime:litert_model_predicates",
         "//litert/cc/dynamic_runtime:litert_profiler",
         "//litert/cc/dynamic_runtime:litert_tensor_buffer",
-        "//litert/cc/internal:litert_runtime_builtin_runtimecapi",
+        "//litert/cc/internal:litert_runtime_proxy_runtimecapi",
         # C++ Common Options API targets.
         "//litert/cc/dynamic_runtime:litert_opaque_options",
         "//litert/cc/dynamic_runtime:litert_options",
-        "//litert/cc/dynamic_runtime/options:litert_cpu_options",
-        "//litert/cc/dynamic_runtime/options:litert_gpu_options",
-        "//litert/cc/dynamic_runtime/options:litert_intel_openvino_options",
-        "//litert/cc/dynamic_runtime/options:litert_qualcomm_options",
         "//litert/cc/options:litert_compiler_options",
+        "//litert/cc/options:litert_cpu_options",
+        "//litert/cc/options:litert_gpu_options",
+        "//litert/cc/options:litert_intel_openvino_options",
+        "//litert/cc/options:litert_qualcomm_options",
         # Other (static) C++ API targets.
         ":litert_any",
-        ":litert_tensor_buffer_types",
-        ":litert_expected",
-        ":litert_common",
-        ":litert_macros",
         ":litert_buffer_ref",
+        ":litert_common",
         ":litert_element_type",
-        ":litert_layout",
         ":litert_environment_options",
-        "//litert/cc/internal:litert_handle",
-        "//litert/cc/internal:litert_c_types_printing",
-        "//litert/cc/internal:litert_runtime_proxy",
+        ":litert_expected",
+        ":litert_layout",
+        ":litert_macros",
+        ":litert_model_types",
+        ":litert_tensor_buffer_types",
         "@com_google_absl//absl/cleanup",
         "@com_google_absl//absl/container:flat_hash_map",
         "@com_google_absl//absl/container:inlined_vector",
         "@com_google_absl//absl/log:absl_check",
-        "@com_google_absl//absl/status",
         "@com_google_absl//absl/status:statusor",
-        "@com_google_absl//absl/strings",
+        "@com_google_absl//absl/status",
         "@com_google_absl//absl/strings:str_format",
         "@com_google_absl//absl/strings:string_view",
-        "//litert/build_common:build_config",
+        "@com_google_absl//absl/strings",
         "@com_google_absl//absl/types:span",
+        "//litert/build_common:build_config",
+        "//litert/c:litert_common",
         "//litert/c/internal:litert_logging",
-        ":litert_model_types",
+        "//litert/cc/internal:litert_c_types_printing",
+        "//litert/cc/internal:litert_handle",
         "//litert/cc/internal:litert_logging",
-        "//litert/core:options",
         "//litert/cc/internal:scoped_file",
         "//litert/cc/internal:scoped_weight_source",
+        "//litert/core:options",
         "@opencl_headers",
         "//tflite/core/api",
         "//tflite/profiling:memory_info",
@@ -1325,8 +1351,8 @@ cc_library(
         "//conditions:default": [
             "//litert/cc/dynamic_runtime:litert_op_options",
             # C++ NPU Options API targets.
-            "//litert/cc/dynamic_runtime/options:litert_google_tensor_options",
-            "//litert/cc/dynamic_runtime/options:litert_mediatek_options",
+            "//litert/cc/options:litert_google_tensor_options",
+            "//litert/cc/options:litert_mediatek_options",
         ],
     }) + gles_headers(),
 )

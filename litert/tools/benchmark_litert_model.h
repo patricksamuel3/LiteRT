@@ -31,6 +31,7 @@ limitations under the License.
 #include "absl/strings/string_view.h"  // from @com_google_absl
 #include "absl/types/span.h"  // from @com_google_absl
 #include "litert/c/internal/litert_logging.h"
+#include "litert/cc/internal/litert_compiled_model_next.h"
 #include "litert/cc/litert_compiled_model.h"
 #include "litert/cc/litert_element_type.h"
 #include "litert/cc/litert_environment.h"
@@ -210,7 +211,7 @@ class ModelRuntimeInfoListener : public ::tflite::benchmark::BenchmarkListener {
  private:
   ::tflite::Interpreter* interpreter_ = nullptr;
 };
-using ::litert::CompiledModel;
+using ::litert::CompiledModelNext;
 using ::litert::Environment;
 using ::litert::Model;
 using ::litert::TensorBuffer;
@@ -315,7 +316,7 @@ class BenchmarkLiteRtModel : public BenchmarkModel {
   uint64_t ComputeInputBytes() override {
     uint64_t total_bytes = 0;
     for (const auto& buffer : *input_buffers_) {
-      LITERT_ASSIGN_OR_ABORT(const size_t buffer_bytes, buffer.Size());
+      LITERT_ASSIGN_OR_ABORT(const size_t buffer_bytes, buffer.PackedSize());
       total_bytes += buffer_bytes;
     }
     return total_bytes;
@@ -328,7 +329,7 @@ class BenchmarkLiteRtModel : public BenchmarkModel {
     float low_range = 0;
     float high_range = 0;
     LITERT_ASSIGN_OR_ABORT(const auto t_tensor_type, t.TensorType());
-    LITERT_ASSIGN_OR_ABORT(const size_t t_size, t.Size());
+    LITERT_ASSIGN_OR_ABORT(const size_t t_size, t.PackedSize());
     size_t num_elements = t_size / *GetByteWidth(t_tensor_type.ElementType());
     tflite::utils::GetDataRangesForType(
         static_cast<TfLiteType>(t_tensor_type.ElementType()), &low_range,
@@ -346,10 +347,10 @@ class BenchmarkLiteRtModel : public BenchmarkModel {
 
   TfLiteStatus ResetInputsAndOutputs() override {
     if (profiler_) {
-      profiler_->StopProfiling();
-      profiler_->GetProfileSummary(compiled_model_->Get());
-      profiler_->Reset();
-      profiler_->StartProfiling();
+      profiler_.StopProfiling();
+      profiler_.GetProfileSummary(compiled_model_->Get());
+      profiler_.Reset();
+      profiler_.StartProfiling();
     }
     return kTfLiteOk;
   }
@@ -421,10 +422,10 @@ class BenchmarkLiteRtModel : public BenchmarkModel {
 
  private:
   std::unique_ptr<litert::Environment> environment_;
-  std::unique_ptr<litert::CompiledModel> compiled_model_;
+  std::unique_ptr<litert::CompiledModelNext> compiled_model_;
   std::unique_ptr<std::vector<litert::TensorBuffer>> input_buffers_;
   std::unique_ptr<std::vector<litert::TensorBuffer>> output_buffers_;
-  std::unique_ptr<litert::Profiler> profiler_;
+  litert::Profiler profiler_;
   std::unique_ptr<BenchmarkLoggingListener> log_output_;
   std::unique_ptr<ModelRuntimeInfoListener> model_runtime_info_listener_;
 

@@ -21,8 +21,15 @@
 #include "litert/c/litert_opaque_options.h"
 #include "litert/c/litert_options.h"
 #include "litert/c/options/litert_compiler_options.h"
+#include "litert/c/options/litert_cpu_options.h"
+#include "litert/c/options/litert_google_tensor_options.h"
+#include "litert/c/options/litert_gpu_options.h"
+#include "litert/c/options/litert_intel_openvino_options.h"
+#include "litert/c/options/litert_mediatek_options.h"
+#include "litert/c/options/litert_qualcomm_options.h"
 #include "litert/c/options/litert_runtime_options.h"
 #include "litert/cc/internal/scoped_file.h"
+#include "litert/cc/litert_common.h"
 #include "litert/cc/litert_expected.h"
 #include "litert/cc/litert_macros.h"
 #include "litert/cc/litert_opaque_options.h"
@@ -34,9 +41,7 @@
 #include "litert/cc/options/litert_mediatek_options.h"
 #include "litert/cc/options/litert_qualcomm_options.h"
 #include "litert/cc/options/litert_runtime_options.h"
-#if defined(LITERT_WITH_EXTERNAL_WEIGHT_LOADER)
 #include "litert/core/options.h"
-#endif  // defined(LITERT_WITH_EXTERNAL_WEIGHT_LOADER)
 
 namespace litert {
 
@@ -60,6 +65,26 @@ LiteRtStatus AppendAndReset(LiteRtOptions options,
   LiteRtOpaqueOptions opaque = slot->Release();
   slot.reset();
   return LiteRtAddOpaqueOptions(options, opaque);
+}
+
+template <typename OptionType, typename GetDataFunc>
+LiteRtStatus AppendAndResetOpaqueData(LiteRtOptions options,
+                                      std::optional<OptionType>& slot,
+                                      GetDataFunc get_data_func) {
+  if (!slot) {
+    return kLiteRtStatusOk;
+  }
+  const char* identifier;
+  void* payload = nullptr;
+  void (*payload_deleter)(void*) = nullptr;
+  LITERT_RETURN_IF_ERROR(
+      get_data_func(slot->Get(), &identifier, &payload, &payload_deleter));
+  LiteRtOpaqueOptions opaque_opts = nullptr;
+  LITERT_RETURN_IF_ERROR(LiteRtCreateOpaqueOptions(
+      identifier, payload, payload_deleter, &opaque_opts));
+  LITERT_RETURN_IF_ERROR(LiteRtAddOpaqueOptions(options, opaque_opts));
+  slot.reset();
+  return kLiteRtStatusOk;
 }
 
 }  // namespace
@@ -99,70 +124,49 @@ Expected<CompilerOptions&> Options::GetCompilerOptions() {
 }
 
 Expected<void> Options::Build() {
-  LITERT_RETURN_IF_ERROR(AppendAndReset(Get(), gpu_options_));
-  LITERT_RETURN_IF_ERROR(AppendAndReset(Get(), cpu_options_));
-  LITERT_RETURN_IF_ERROR(AppendAndReset(Get(), qualcomm_options_));
-  LITERT_RETURN_IF_ERROR(AppendAndReset(Get(), mediatek_options_));
-  LITERT_RETURN_IF_ERROR(AppendAndReset(Get(), google_tensor_options_));
-  LITERT_RETURN_IF_ERROR(AppendAndReset(Get(), intel_openvino_options_));
-  if (runtime_options_) {
-    const char* identifier;
-    void* payload = nullptr;
-    void (*payload_deleter)(void*) = nullptr;
-    LITERT_RETURN_IF_ERROR(LrtGetOpaqueRuntimeOptionsData(
-        runtime_options_->Get(), &identifier, &payload, &payload_deleter));
-    LiteRtOpaqueOptions opaque_runtime_options = nullptr;
-    LITERT_RETURN_IF_ERROR(LiteRtCreateOpaqueOptions(
-        identifier, payload, payload_deleter, &opaque_runtime_options));
-    LITERT_RETURN_IF_ERROR(
-        LiteRtAddOpaqueOptions(Get(), opaque_runtime_options));
-    runtime_options_.reset();
-  }
-  if (compiler_options_) {
-    const char* identifier;
-    void* payload = nullptr;
-    void (*payload_deleter)(void*) = nullptr;
-    LITERT_RETURN_IF_ERROR(LrtGetOpaqueCompilerOptionsData(
-        compiler_options_->Get(), &identifier, &payload, &payload_deleter));
-    LiteRtOpaqueOptions opaque_compiler_options = nullptr;
-    LITERT_RETURN_IF_ERROR(LiteRtCreateOpaqueOptions(
-        identifier, payload, payload_deleter, &opaque_compiler_options));
-    LITERT_RETURN_IF_ERROR(
-        LiteRtAddOpaqueOptions(Get(), opaque_compiler_options));
-    compiler_options_.reset();
-  }
+  LITERT_RETURN_IF_ERROR(AppendAndResetOpaqueData(Get(), gpu_options_,
+                                                  LrtGetOpaqueGpuOptionsData));
+  LITERT_RETURN_IF_ERROR(AppendAndResetOpaqueData(Get(), cpu_options_,
+                                                  LrtGetOpaqueCpuOptionsData));
+  LITERT_RETURN_IF_ERROR(AppendAndResetOpaqueData(
+      Get(), qualcomm_options_, LrtGetOpaqueQualcommOptionsData));
+  LITERT_RETURN_IF_ERROR(AppendAndResetOpaqueData(
+      Get(), mediatek_options_, LrtGetOpaqueMediatekOptionsData));
+  LITERT_RETURN_IF_ERROR(AppendAndResetOpaqueData(
+      Get(), google_tensor_options_, LrtGetOpaqueGoogleTensorOptionsData));
+  LITERT_RETURN_IF_ERROR(AppendAndResetOpaqueData(
+      Get(), intel_openvino_options_, LrtGetOpaqueIntelOpenVinoOptionsData));
+  LITERT_RETURN_IF_ERROR(AppendAndResetOpaqueData(
+      Get(), runtime_options_, LrtGetOpaqueRuntimeOptionsData));
+  LITERT_RETURN_IF_ERROR(AppendAndResetOpaqueData(
+      Get(), compiler_options_, LrtGetOpaqueCompilerOptionsData));
   return {};
 }
 
 Expected<void> Options::SetExternalWeightScopedFile(
     ScopedFile& scoped_file, ScopedWeightSectionMap sections) {
-#if defined(LITERT_WITH_EXTERNAL_WEIGHT_LOADER)
   if (!scoped_file.IsValid()) {
-    return Unexpected(kLiteRtStatusErrorInvalidArgument,
+    return Unexpected(Status::kErrorInvalidArgument,
                       "Scoped file handle must be valid");
   }
   if (sections.empty()) {
-    return Unexpected(kLiteRtStatusErrorInvalidArgument,
+    return Unexpected(Status::kErrorInvalidArgument,
                       "At least one external buffer group must be provided");
   }
   for (const auto& [name, section] : sections) {
     if (section.length == 0) {
-      return Unexpected(kLiteRtStatusErrorInvalidArgument,
+      return Unexpected(Status::kErrorInvalidArgument,
                         "Section length must be positive for group " + name);
     }
   }
   auto* options_impl = reinterpret_cast<LiteRtOptionsT*>(Get());
   if (!options_impl) {
-    return Unexpected(kLiteRtStatusErrorRuntimeFailure,
+    return Unexpected(Status::kErrorRuntimeFailure,
                       "Options handle must not be null");
   }
   options_impl->scoped_weight_source = std::make_unique<ScopedWeightSource>(
       std::move(scoped_file), std::move(sections));
   return {};
-#else
-  return Unexpected(kLiteRtStatusErrorInvalidArgument,
-                    "LiteRT was built without external weight loader support");
-#endif
 }
 
 }  // namespace litert

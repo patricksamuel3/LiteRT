@@ -30,4 +30,7 @@ target_link_libraries(qnn_wrappers
         absl::str_format
         absl::span
         absl::string_view
+    PRIVATE
+        qnn_log
+        qnn_miscs
 )

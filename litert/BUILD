@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-load("//litert/build_common:special_rule.bzl", "litert_cc_users", "litert_friends")
+load("//litert/build_common:special_rule.bzl", "litert_friends")
 
 package(
     # copybara:uncomment default_applicable_licenses = ["//third_party/odml:license"],
@@ -43,7 +43,7 @@ package_group(
         "//litert/python/...",
         "//litert/runtime/accelerators/gpu/...",
         "//litert/runtime/dispatch/...",
-        "//litert/runtime/ml_drift_delegate/...",
+        "//third_party/odml/litert/ml_drift/delegate/...",
         "//litert/rust/...",
         "//litert/samples/...",
         "//litert/sdk_util/...",
@@ -53,33 +53,15 @@ package_group(
         # When litert_link_capi_so=false
         "//ci/tools/...",
         # copybara:uncomment "//third_party/odml/litert/tensor/...",
-    ] + litert_cc_users() + litert_friends(),
+    ] + litert_friends(),
 )
 
 # Users with access to the LiteRT C++ API linked statically (i.e. litert/cc/).
 # For dynamically linked C++ API, use :litert_cc_users_dynamic_link.
+# This is public for now.
 package_group(
     name = "litert_cc_users_static_link",
-    packages = [
-        "//litert/ats/...",
-        "//litert/google/...",
-        "//litert/integration_test/...",
-        "//litert/js/...",
-        "//litert/kotlin/...",
-        "//litert/python/...",
-        "//third_party/odml/litert/tensor/...",
-        "//litert/samples/semantic_similarity/...",
-        # TODO(b/424778444): Internal runtime would better not call cc runtime APIs. Remove below targets.
-        "//litert/runtime/...",
-        "//litert/cc/...",
-        "//litert/c/...",
-        "//third_party/odml/litert/weight_loader/...",
-        "//litert/c/options/...",
-        "//litert/compiler/plugin/...",
-        "//litert/core/model/...",
-        "//litert/test/...",
-        "//litert/tools/...",
-    ] + litert_cc_users() + litert_friends(),
+    packages = ["//..."],
 )
 
 # All packages with visibility to the internal APIs
@@ -102,6 +84,8 @@ package_group(
         "//litert/test/...",
         "//litert/tools/...",
         "//litert/vendors/...",
+        "//third_party/odml/infra/fabric/...",
+        "//third_party/odml/litert/ml_drift/...",
         "//third_party/odml/litert/weight_loader/...",
     ] + litert_friends(),
 )
@@ -129,16 +113,7 @@ package_group(
 # All litert users, least restrictive option.
 package_group(
     name = "litert_public",
-    # copybara:uncomment_begin(oss)
-    # includes = [
-    # ":litert_c_users",
-    # ":litert_cc_users_dynamic_link",
-    # ":litert_cc_users_static_link",
-    # ":litert_internal_users",
-    # ],
-    # copybara:uncomment_end_and_comment_begin
     packages = ["//..."],
-    # copybara:comment_end
 )
 
 package_group(
@@ -165,14 +140,35 @@ exports_files(
 
 # If litert_link_capi_so is not defined, each target links LiteRT C API either statically or
 # dynamically based on its own requirements.
+#
+# DEPRECATED: Use :litert_runtime_link_mode_dynamic instead.
 config_setting(
     name = "litert_link_capi_so",
     values = {"define": "litert_link_capi_so=true"},
 )
 
+# DEPRECATED: Use :litert_runtime_link_mode_static instead.
 config_setting(
     name = "litert_link_capi_static",
     values = {"define": "litert_link_capi_so=false"},
+)
+
+# LiteRT runtime will be linked dynamically.
+config_setting(
+    name = "litert_runtime_link_mode_dynamic",
+    values = {"define": "litert_runtime_link_mode=dynamic"},
+)
+
+# LiteRT runtime will be linked statically. (This is the default behavior.)
+config_setting(
+    name = "litert_runtime_link_mode_static",
+    values = {"define": "litert_runtime_link_mode=static"},
+)
+
+# LiteRT runtime will not be linked in the binary.
+config_setting(
+    name = "litert_runtime_link_mode_none",
+    values = {"define": "litert_runtime_link_mode=none"},
 )
 
 # Configuration for building with built-in kernels (default)

@@ -12,6 +12,11 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+exports_files([
+    "PATCH.tf_xla_tsl_win_copts",
+    "PATCH.protobuf_port_msvc_compat",
+])
+
 # The default `android_sdk_repository` inside `rules_android` v0.7.1 registers toolchains using the type `@rules_android//toolchains/android:sdk_toolchain_type`.
 # However, the native `android_binary` rules inside `@org_tensorflow` are mapped to the older `@@bazel_tools//tools/android:sdk_toolchain_type`.
 # When running outside of Bzlmod (i.e. `WORKSPACE` mode), Bazel does not inject the legacy type aliases, causing "No matching toolchains found".

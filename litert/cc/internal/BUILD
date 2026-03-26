@@ -15,6 +15,7 @@
 load("@rules_cc//cc:cc_library.bzl", "cc_library")
 load("@rules_cc//cc:cc_shared_library.bzl", "cc_shared_library")
 load("@rules_cc//cc:cc_test.bzl", "cc_test")
+load("//litert/build_common:special_rule.bzl", "get_compatible_with_portable")
 
 package(
     # copybara:uncomment default_applicable_licenses = ["@org_tensorflow//tensorflow:license"],
@@ -43,6 +44,8 @@ next_library_visibility = [
     # "//litert/ats:__subpackages__",
     # "//litert/integration_test:__subpackages__",
     # "//litert/js/packages:__subpackages__",  # TODO: b/459587509 - Remove this with CompiledModel migration.
+    # "//litert/cc:__pkg__",
+    # "//litert/tools:__pkg__",
     # copybara:uncomment_end_and_comment_begin
     "//visibility:public",
     # copybara:comment_end
@@ -86,6 +89,7 @@ cc_library(
         "//litert/c:litert_tensor_buffer_types",
         "//litert/c:litert_webgpu_types",
         "//litert/c/internal:litert_logging",
+        "//litert/cc:litert_common",
         "//litert/cc:litert_environment",
         "//litert/cc:litert_event",
         "//litert/cc:litert_expected",
@@ -244,6 +248,7 @@ cc_test(
 cc_library(
     name = "litert_source_location",
     hdrs = ["litert_source_location.h"],
+    compatible_with = get_compatible_with_portable(),
     visibility = ["//visibility:public"],
 )
 
@@ -283,6 +288,7 @@ cc_library(
     deps = [
         "//litert/c:litert_common",
         "//litert/c/internal:litert_logging",
+        "//litert/cc:litert_common",
         "//litert/cc:litert_expected",
         "//litert/cc:litert_macros",
         "@com_google_absl//absl/debugging:leak_check",
@@ -368,6 +374,7 @@ cc_library(
         "//litert/c:litert_model_types",
         "//litert/c:litert_op_code",
         "//litert/c:litert_op_options",
+        "//litert/cc:litert_common",
         "//litert/cc:litert_expected",
         "//litert/cc:litert_macros",
         "@com_google_absl//absl/strings:string_view",
@@ -387,6 +394,7 @@ cc_test(
         "//litert/c:litert_common",
         "//litert/c:litert_op_code",
         "//litert/cc:litert_buffer_ref",
+        "//litert/cc:litert_common",
         "//litert/cc:litert_expected",
         "//litert/core/model",
         "//litert/core/model:buffer_manager",
@@ -413,6 +421,7 @@ cc_library(
         "//litert/c:litert_layout",
         "//litert/c:litert_model_types",
         "//litert/c:litert_op_code",
+        "//litert/cc:litert_common",
         "//litert/cc:litert_element_type",
         "//litert/cc:litert_expected",
         "//litert/cc:litert_layout",
@@ -447,6 +456,10 @@ cc_library(
     name = "litert_extended_model",
     srcs = ["litert_extended_model.cc"],
     hdrs = ["litert_extended_model.h"],
+    defines = select({
+        "//litert:litert_runtime_link_mode_dynamic": ["LITERT_DYNAMIC_RUNTIME"],
+        "//conditions:default": [],
+    }),
     visibility = internal_static_library_visibility,
     deps = [
         ":litert_consts",
@@ -457,11 +470,14 @@ cc_library(
         "//litert/c:litert_model_types",
         "//litert/c:litert_op_code",
         "//litert/cc:litert_buffer_ref",
+        "//litert/cc:litert_common",
         "//litert/cc:litert_element_type",
         "//litert/cc:litert_expected",
         "//litert/cc:litert_macros",
         "//litert/cc:litert_model",
+        "//litert/cc:litert_model_types",
         "//litert/cc:litert_ranked_tensor_type",
+        "//tflite/converter:allocation",
         "@com_google_absl//absl/container:inlined_vector",
         "@com_google_absl//absl/strings:string_view",
         "@com_google_absl//absl/types:span",
@@ -480,12 +496,15 @@ cc_test(
         "//litert/c:litert_common",
         "//litert/c:litert_op_code",
         "//litert/cc:litert_buffer_ref",
+        "//litert/cc:litert_common",
         "//litert/cc:litert_element_type",
         "//litert/cc:litert_expected",
         "//litert/core/model",
         "//litert/core/util:flatbuffer_tools_testonly",
         "//litert/test:common",
         "//litert/test:matchers",
+        "//tflite:stderr_reporter",
+        "//tflite/converter:allocation",
         "@com_google_absl//absl/strings:string_view",
         "@com_google_absl//absl/types:span",
         "@com_google_googletest//:gtest_main",
@@ -520,6 +539,7 @@ cc_library(
         "//litert/cc:litert_macros",
         "//litert/cc:litert_model",
         "//litert/cc:litert_options",
+        "//litert/cc:litert_profiler",
         "//litert/cc:litert_tensor_buffer",
         "@com_google_absl//absl/cleanup",
         "@com_google_absl//absl/strings:string_view",
@@ -539,7 +559,10 @@ cc_test(
         "//litert/c:litert_tensor_buffer",
         "//litert/cc:litert_common",
         "//litert/cc:litert_environment",
+        "//litert/cc:litert_macros",
         "//litert/cc:litert_model",
+        "//litert/cc:litert_options",
+        "//litert/cc:litert_profiler",
         "//litert/cc:litert_tensor_buffer",
         "//litert/cc:litert_tensor_buffer_requirements",
         "//litert/cc:litert_tensor_buffer_types",
@@ -550,6 +573,42 @@ cc_test(
         "//tflite/c:c_api_opaque",
         "//tflite/c:common",
         "//tflite/kernels:builtin_ops",
+        "@com_google_absl//absl/log:absl_log",
+        "@com_google_absl//absl/strings:string_view",
+        "@com_google_absl//absl/types:span",
+        "@com_google_googletest//:gtest_main",
+    ],
+)
+
+cc_test(
+    name = "litert_compiled_model_next_gpu_test",
+    srcs = ["litert_compiled_model_next_gpu_test.cc"],
+    data = [
+        "//litert/test:mlir_test_data",
+        "//litert/test:tflite_test_data",
+    ],
+    tags = [
+        "no_oss",
+        "requires-gpu-nvidia",
+    ],
+    deps = [
+        ":litert_compiled_model_next",
+        "//litert/c:litert_event",
+        "//litert/c:litert_profiler_event",
+        "//litert/c:litert_tensor_buffer",
+        "//litert/cc:litert_common",
+        "//litert/cc:litert_environment",
+        "//litert/cc:litert_expected",
+        "//litert/cc:litert_macros",
+        "//litert/cc:litert_options",
+        "//litert/cc:litert_profiler",
+        "//litert/cc:litert_tensor_buffer",
+        "//litert/cc/options:litert_gpu_options",
+        "//litert/cc/options:litert_runtime_options",
+        "//litert/runtime/accelerators/gpu:ml_drift_cl_gl_accelerator",  # buildcleaner: keep
+        "//litert/test:common",
+        "//litert/test:matchers",
+        "//litert/test:simple_model",
         "@com_google_absl//absl/log:absl_log",
         "@com_google_absl//absl/strings:string_view",
         "@com_google_absl//absl/types:span",
@@ -595,40 +654,57 @@ cc_test(
 
 # Do not use this target directly. It should only be used by Environment.
 cc_library(
-    name = "litert_runtime_builtin",
+    name = "litert_runtime_builtin_dynamic",
     srcs = ["litert_runtime_builtin.cc"],
     hdrs = ["litert_runtime_builtin.h"],
-    visibility = [
-        "//litert/cc:__pkg__",
-    ],
+    # The visibility is for testing only, otherwise it would be private.
+    visibility = ["//litert/cc/dynamic_runtime:__pkg__"],
     deps = [
-        "//litert/c:litert_common",
-        "//litert/c:litert_compiled_model",
+        "//litert/c:litert_compiled_model_header",
         "//litert/c:litert_environment_header",
-        "//litert/c:litert_environment_options",
-        "//litert/c:litert_event",
+        "//litert/c:litert_environment_options_header",
+        "//litert/c:litert_event_header",
         "//litert/c:litert_layout",
-        "//litert/c:litert_metrics",
-        "//litert/c:litert_model",
+        "//litert/c:litert_metrics_header",
+        "//litert/c:litert_model_header",
         "//litert/c:litert_opaque_options_header",
-        "//litert/c:litert_options",
-        "//litert/c:litert_profiler",
-        "//litert/c:litert_tensor_buffer",
+        "//litert/c:litert_options_header",
+        "//litert/c:litert_runtime_c_api_shared_lib",  # buildcleaner: keep
+        "//litert/c:litert_tensor_buffer_header",
         "//litert/c/internal:litert_runtime_c_api",
     ],
 )
 
-# Do not use this target directly. It should only be used by Environment.
 cc_library(
-    name = "litert_runtime_builtin_runtimecapi",
+    name = "litert_runtime_builtin_static",
     srcs = ["litert_runtime_builtin.cc"],
     hdrs = ["litert_runtime_builtin.h"],
+    # The visibility is for testing only, otherwise it would be private.
     visibility = [
-        "//litert/cc:__subpackages__",
+        "//litert/cc:__pkg__",
+        "//litert/kotlin/src/tests/google:__pkg__",
     ],
     deps = [
-        "//litert/c:litert_environment_options",
-        "//litert/c:litert_runtime_c_api_shared_lib",
+        "//litert/c:litert_compiled_model_impl",
+        "//litert/c:litert_environment_impl",
+        "//litert/c:litert_environment_options_impl",
+        "//litert/c:litert_event_impl",
+        "//litert/c:litert_layout",
+        "//litert/c:litert_metrics_impl",
+        "//litert/c:litert_model_impl",
+        "//litert/c:litert_opaque_options_impl",
+        "//litert/c:litert_options_impl",
+        "//litert/c:litert_tensor_buffer_impl",
+        "//litert/c/internal:litert_runtime_c_api",
+    ],
+)
+
+cc_library(
+    name = "litert_runtime_builtin_none",
+    srcs = ["litert_runtime_no_builtin.cc"],
+    hdrs = ["litert_runtime_builtin.h"],
+    visibility = ["//visibility:private"],
+    deps = [
         "//litert/c/internal:litert_runtime_c_api",
     ],
 )
@@ -665,7 +741,6 @@ cc_test(
     ],
 )
 
-# This target should NOT introduce any dependency on the runtime implementation.
 cc_library(
     name = "litert_runtime_proxy",
     hdrs = ["litert_runtime_proxy.h"],
@@ -682,7 +757,45 @@ cc_library(
         "//litert/c:litert_model_types",
         "//litert/c:litert_opaque_options_header",
         "//litert/c:litert_opencl_types",
-        "//litert/c:litert_profiler_event",
+        "//litert/c:litert_tensor_buffer_types",
+        "//litert/c:litert_webgpu_types",
+        "//litert/c/internal:litert_runtime_c_api",
+        "//litert/c/internal:litert_scheduling_info",
+        "@com_google_absl//absl/log:absl_check",
+        "@com_google_absl//absl/log:die_if_null",
+    ] + select({
+        "//litert:litert_runtime_link_mode_dynamic": [
+            ":litert_runtime_builtin_dynamic",
+        ],
+        "//litert:litert_runtime_link_mode_none": [
+            ":litert_runtime_builtin_none",
+        ],
+        "//conditions:default": [":litert_runtime_builtin_static"],
+    }),
+)
+
+# TODO(niuchl): Remove this target once all dynamic_runtime targets are migrated.
+cc_library(
+    name = "litert_runtime_proxy_runtimecapi",
+    hdrs = ["litert_runtime_proxy.h"],
+    visibility = [
+        "//litert/cc:__pkg__",
+        "//litert/cc/dynamic_runtime:__pkg__",
+    ],
+    deps = [
+        ":litert_runtime_builtin_dynamic",
+        "//litert/c:litert_any",
+        "//litert/c:litert_common",
+        "//litert/c:litert_custom_op_kernel",
+        "//litert/c:litert_custom_tensor_buffer",
+        "//litert/c:litert_environment_options_header",
+        "//litert/c:litert_event_type",
+        "//litert/c:litert_gl_types",
+        "//litert/c:litert_layout",
+        "//litert/c:litert_metrics_header",
+        "//litert/c:litert_model_types",
+        "//litert/c:litert_opaque_options_header",
+        "//litert/c:litert_opencl_types",
         "//litert/c:litert_tensor_buffer_types",
         "//litert/c:litert_webgpu_types",
         "//litert/c/internal:litert_runtime_c_api",

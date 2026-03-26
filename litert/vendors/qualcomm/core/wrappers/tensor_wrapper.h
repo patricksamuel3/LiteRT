@@ -148,6 +148,8 @@ class TensorWrapper final {
            qnn_tensor_.v2.type == QNN_TENSOR_TYPE_APP_READ;
   }
 
+  bool IsQuantBitwidth(std::uint32_t bitwidth) const;
+
   // Utilities /////////////////////////////////////////////////////////
 
   // Allocate memory on owned_data_ for output tensors
@@ -168,6 +170,8 @@ class TensorWrapper final {
     }
     SetTensorType(QNN_TENSOR_TYPE_APP_READ);
   }
+
+  void SetQuantBitwidth(std::uint32_t bitwidth);
 
  private:
   void SetDataBy(std::uint32_t bytes, const void* data, bool copy_data);
@@ -206,6 +210,7 @@ class TensorWrapper final {
 };
 
 using TensorWrapperRef = std::reference_wrapper<TensorWrapper>;
+using ConstTensorWrapperRef = std::reference_wrapper<const TensorWrapper>;
 
 // Get the Qnn_DataType_t associated with given C++ type.
 template <typename T>

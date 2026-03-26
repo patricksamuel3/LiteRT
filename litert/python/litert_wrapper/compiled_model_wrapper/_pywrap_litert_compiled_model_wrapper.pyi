@@ -148,20 +148,24 @@ class CompiledModelWrapper:
         """
         ...
 
+    def ResizeInputTensor(self, sig_idx: int, input_idx: int, dims: List[int]) -> None:
+        """Resizes an input tensor using strict shape validation."""
+        ...
+
+    def ResizeInputTensorNonStrict(self, sig_idx: int, input_idx: int, dims: List[int]) -> None:
+        """Resizes an input tensor using non-strict shape validation."""
+        ...
+
 def CreateCompiledModelFromFile(
+        environment_capsule: object,
         model_path: str,
-        runtime_path: str = ...,
-        compiler_plugin_path: str = ...,
-        dispatch_library_path: str = ...,
         hardware_accel: int = ...
 ) -> CompiledModelWrapper:
     """Creates a compiled model from a model file.
 
     Args:
+      environment_capsule: Capsule owning a LiteRT environment.
       model_path: Path to the model file.
-      runtime_path: Optional path to the runtime library.
-      compiler_plugin_path: Optional path to the compiler plugin.
-      dispatch_library_path: Optional path to the dispatch library.
       hardware_accel: Optional hardware acceleration flag.
 
     Returns:
@@ -171,19 +175,15 @@ def CreateCompiledModelFromFile(
 
 
 def CreateCompiledModelFromBuffer(
+        environment_capsule: object,
         model_data: bytes,
-        runtime_path: str = ...,
-        compiler_plugin_path: str = ...,
-        dispatch_library_path: str = ...,
         hardware_accel: int = ...
 ) -> CompiledModelWrapper:
     """Creates a compiled model from a model buffer.
 
     Args:
+      environment_capsule: Capsule owning a LiteRT environment.
       model_data: The model data as bytes.
-      runtime_path: Optional path to the runtime library.
-      compiler_plugin_path: Optional path to the compiler plugin.
-      dispatch_library_path: Optional path to the dispatch library.
       hardware_accel: Optional hardware acceleration flag.
 
     Returns:

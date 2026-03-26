@@ -22,7 +22,6 @@
 #include "absl/strings/string_view.h"  // from @com_google_absl
 #include "litert/c/litert_common.h"
 #include "litert/test/matchers.h"
-#include "toml.hpp"  // from @tomlplusplus
 
 namespace litert {
 namespace internal {
@@ -84,11 +83,6 @@ TEST(LiteRtTomlParserTest, ParseTomlKeyValues) {
     key5 = ["item1" ,"item2", "item3"]
   )";
 
-  auto tbl = toml::parse(toml_str);
-  if (tbl.failed()) {
-    ADD_FAILURE() << "tomlplusplus parse failed: " << tbl.error().description();
-  }
-
   int call_count = 0;
   EXPECT_THAT(ParseToml(toml_str,
                         [&](absl::string_view key, absl::string_view value) {
@@ -106,20 +100,11 @@ TEST(LiteRtTomlParserTest, ParseTomlKeyValues) {
                           } else if (key == "key5") {
                             EXPECT_EQ(value,
                                       "[\"item1\" ,\"item2\", \"item3\"]");
-
                             auto parsed_array = ParseTomlStringArray(value);
                             EXPECT_TRUE(parsed_array.HasValue());
-                            auto toml_array = tbl["key5"].as_array();
-                            EXPECT_NE(toml_array, nullptr);
-                            if (parsed_array.HasValue() &&
-                                toml_array != nullptr) {
-                              std::vector<std::string> expected_array;
-                              for (const auto& item : *toml_array) {
-                                expected_array.push_back(
-                                    item.value<std::string>().value_or(""));
-                              }
-                              EXPECT_EQ(*parsed_array, expected_array);
-                            }
+                            EXPECT_THAT(parsed_array->at(0), "item1");
+                            EXPECT_THAT(parsed_array->at(1), "item2");
+                            EXPECT_THAT(parsed_array->at(2), "item3");
                           } else {
                             ADD_FAILURE() << "Unexpected key: " << key;
                           }

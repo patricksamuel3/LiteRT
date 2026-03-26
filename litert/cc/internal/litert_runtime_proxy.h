@@ -34,9 +34,9 @@
 #include "litert/c/litert_model_types.h"
 #include "litert/c/litert_opaque_options.h"
 #include "litert/c/litert_opencl_types.h"
-#include "litert/c/litert_profiler_event.h"
 #include "litert/c/litert_tensor_buffer_types.h"
 #include "litert/c/litert_webgpu_types.h"
+#include "litert/cc/internal/litert_runtime_builtin.h"
 
 namespace litert {
 namespace internal {
@@ -55,8 +55,15 @@ namespace internal {
 // different runtime implementations (e.g. real runtime, mock runtime).
 class RuntimeProxy {
  public:
+  /// @brief Creates a runtime proxy with the externally provided system runtime
+  /// handle.
+  ///
+  /// If the system runtime handle is not provided, the builtin runtime will be
+  /// used.
   explicit RuntimeProxy(const LiteRtRuntimeCApiStruct* runtime_c_api)
-      : runtime_c_api_(ABSL_DIE_IF_NULL(runtime_c_api)) {};
+      : runtime_c_api_(ABSL_DIE_IF_NULL(runtime_c_api == nullptr
+                                            ? kLiteRtRuntimeBuiltin
+                                            : runtime_c_api)) {};
 
   ~RuntimeProxy() = default;
 
@@ -734,7 +741,6 @@ class RuntimeProxy {
                                tensor_buffer, host_memory_addr);
   }
 
-#if LITERT_HAS_AHWB_SUPPORT
   LiteRtStatus CreateTensorBufferFromAhwb(
       LiteRtEnvironment env, const LiteRtRankedTensorType* tensor_type,
       AHardwareBuffer* ahwb, size_t ahwb_offset,
@@ -750,8 +756,6 @@ class RuntimeProxy {
                                ahwb);
   }
 
-#endif  // LITERT_HAS_AHWB_SUPPORT
-#if LITERT_HAS_ION_SUPPORT
   LiteRtStatus CreateTensorBufferFromIonBuffer(
       const LiteRtRankedTensorType* tensor_type, void* ion_buffer_addr,
       int ion_buffer_fd, size_t ion_buffer_size, size_t ion_buffer_offset,
@@ -769,8 +773,6 @@ class RuntimeProxy {
                                ion_buffer_addr, ion_buffer_fd);
   }
 
-#endif  // LITERT_HAS_ION_SUPPORT
-#if LITERT_HAS_DMABUF_SUPPORT
   LiteRtStatus CreateTensorBufferFromDmaBufBuffer(
       const LiteRtRankedTensorType* tensor_type, void* dmabuf_buffer_addr,
       int dmabuf_buffer_fd, size_t dmabuf_buffer_size,
@@ -790,8 +792,6 @@ class RuntimeProxy {
                                dmabuf_buffer_fd);
   }
 
-#endif  // LITERT_HAS_DMABUF_SUPPORT
-#if LITERT_HAS_FASTRPC_SUPPORT
   LiteRtStatus CreateTensorBufferFromFastRpcBuffer(
       const LiteRtRankedTensorType* tensor_type, void* fastrpc_buffer_addr,
       int fastrpc_fd, size_t fastrpc_buffer_size, size_t fastrpc_buffer_offset,
@@ -810,8 +810,6 @@ class RuntimeProxy {
                                fastrpc_buffer_fd);
   }
 
-#endif  // LITERT_HAS_FASTRPC_SUPPORT
-#if LITERT_HAS_OPENCL_SUPPORT
   LiteRtStatus CreateTensorBufferFromOpenClMemory(
       LiteRtEnvironment env, const LiteRtRankedTensorType* tensor_type,
       LiteRtTensorBufferType buffer_type, LiteRtClMem cl_mem_addr,
@@ -828,7 +826,6 @@ class RuntimeProxy {
                                tensor_buffer, cl_mem_addr);
   }
 
-#endif  // LITERT_HAS_OPENCL_SUPPORT
   LiteRtStatus GetTensorBufferCustomTensorBufferHandle(
       LiteRtTensorBuffer tensor_buffer, HwMemoryHandle* hw_memory_handle) {
     LITERT_PROXY_METHOD_STATUS(
@@ -872,7 +869,6 @@ class RuntimeProxy {
                                layer);
   }
 
-#if LITERT_HAS_WEBGPU_SUPPORT
   LiteRtStatus CreateTensorBufferFromWebGpuBuffer(
       LiteRtEnvironment env, const LiteRtRankedTensorType* tensor_type,
       LiteRtTensorBufferType buffer_type, LiteRtWGPUBuffer wgpu_buffer,
@@ -899,8 +895,6 @@ class RuntimeProxy {
                                webgpu_texture_size, deallocator, tensor_buffer);
   }
 
-#endif  // LITERT_HAS_WEBGPU_SUPPORT
-#if LITERT_HAS_METAL_SUPPORT
   LiteRtStatus CreateTensorBufferFromMetalMemory(
       LiteRtEnvironment env, const LiteRtRankedTensorType* tensor_type,
       LiteRtTensorBufferType buffer_type, void* metal_buffer,
@@ -917,15 +911,12 @@ class RuntimeProxy {
                                tensor_buffer, hw_memory_handle);
   }
 
-#endif  // LITERT_HAS_METAL_SUPPORT
-#if LITERT_HAS_VULKAN_SUPPORT
   LiteRtStatus GetTensorBufferVulkanMemory(LiteRtTensorBuffer tensor_buffer,
                                            HwMemoryHandle* hw_memory_handle) {
     LITERT_PROXY_METHOD_STATUS(litert_get_tensor_buffer_vulkan_memory,
                                tensor_buffer, hw_memory_handle);
   }
 
-#endif  // LITERT_HAS_VULKAN_SUPPORT
   LiteRtStatus DuplicateTensorBuffer(LiteRtTensorBuffer tensor_buffer) {
     LITERT_PROXY_METHOD_STATUS(litert_duplicate_tensor_buffer, tensor_buffer);
   }
@@ -1222,53 +1213,6 @@ class RuntimeProxy {
                                         int size_bytes) {
     LITERT_PROXY_METHOD_STATUS(litert_add_external_tensor_binding, options,
                                signature_name, tensor_name, data, size_bytes);
-  }
-
-  //
-  // LiteRtProfiler
-  //
-  LiteRtStatus CreateProfiler(int size, LiteRtProfiler* profiler) {
-    LITERT_PROXY_METHOD_STATUS(litert_create_profiler, size, profiler);
-  }
-
-  void DestroyProfiler(LiteRtProfiler profiler) {
-    LITERT_PROXY_METHOD_VOID(litert_destroy_profiler, profiler);
-  }
-
-  LiteRtStatus StartProfiler(LiteRtProfiler profiler) {
-    LITERT_PROXY_METHOD_STATUS(litert_start_profiler, profiler);
-  }
-
-  LiteRtStatus StopProfiler(LiteRtProfiler profiler) {
-    LITERT_PROXY_METHOD_STATUS(litert_stop_profiler, profiler);
-  }
-
-  LiteRtStatus ResetProfiler(LiteRtProfiler profiler) {
-    LITERT_PROXY_METHOD_STATUS(litert_reset_profiler, profiler);
-  }
-
-  LiteRtStatus SetProfilerCurrentEventSource(LiteRtProfiler profiler,
-                                             ProfiledEventSource event_source) {
-    LITERT_PROXY_METHOD_STATUS(litert_set_profiler_current_event_source,
-                               profiler, event_source);
-  }
-
-  LiteRtStatus GetNumProfilerEvents(LiteRtProfiler profiler, int* num_events) {
-    LITERT_PROXY_METHOD_STATUS(litert_get_num_profiler_events, profiler,
-                               num_events);
-  }
-
-  LiteRtStatus GetProfilerEvents(LiteRtProfiler profiler, int num_events,
-                                 ProfiledEventData* events) {
-    LITERT_PROXY_METHOD_STATUS(litert_get_profiler_events, profiler, num_events,
-                               events);
-  }
-
-  LiteRtStatus GetProfileSummary(LiteRtProfiler profiler,
-                                 LiteRtCompiledModel compiled_model,
-                                 const char** summary) {
-    LITERT_PROXY_METHOD_STATUS(litert_get_profile_summary, profiler,
-                               compiled_model, summary);
   }
 
  protected:

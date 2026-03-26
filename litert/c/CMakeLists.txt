@@ -15,11 +15,64 @@
 # LiteRT C API
 cmake_minimum_required(VERSION 3.20)
 
-set(LITERT_C_API_SOURCES
-    internal/litert_accelerator.cc
-    internal/litert_accelerator_registration.cc
-    internal/litert_delegate_wrapper.cc
-    internal/litert_tensor_buffer_registry.cc
+add_subdirectory(internal)
+
+set(LITERT_C_PUBLIC_HEADERS
+    litert_any.h
+    litert_builder.h
+    litert_common.h
+    litert_compiled_model.h
+    litert_custom_op_kernel.h
+    litert_custom_tensor_buffer.h
+    litert_environment_options.h
+    litert_environment.h
+    litert_event_type.h
+    litert_event.h
+    litert_gl_types.h
+    litert_layout.h
+    litert_metrics.h
+    litert_model_types.h
+    litert_model.h
+    litert_op_code.h
+    litert_op_options.h
+    litert_opaque_options.h
+    litert_opencl_types.h
+    litert_options.h
+    litert_platform_support.h
+    litert_profiler_event.h
+    litert_profiler.h
+    litert_tensor_buffer_requirements.h
+    litert_tensor_buffer_types.h
+    litert_tensor_buffer.h
+    litert_webgpu_types.h
+    options/litert_compiler_options.h
+    options/litert_cpu_options.h
+    options/litert_google_tensor_options.h
+    options/litert_google_tensor_options_type.h
+    options/litert_gpu_options.h
+    options/litert_intel_openvino_options.h
+    options/litert_mediatek_options.h
+    options/litert_qualcomm_options.h
+    options/litert_runtime_options.h
+    options/litert_samsung_options.h
+    options/litert_webnn_options.h
+)
+
+set(LITERT_C_REQUIRED_INTERNAL_HEADERS
+    internal/litert_logging.h
+    internal/litert_runtime_c_api.h
+    internal/litert_dispatch_delegate.h
+    internal/litert_scheduling_info.h
+)
+
+set(LITERT_C_REQUIRED_VENDOR_HEADERS
+    litert_compiler_plugin.h
+    litert_compiler_plugin_api.h
+    litert_dispatch.h
+    litert_dispatch_api.h
+)
+
+set(LITERT_C_PUBLIC_SOURCES
     litert_common.cc
     litert_compiled_model.cc
     litert_environment.cc
@@ -35,6 +88,62 @@ set(LITERT_C_API_SOURCES
     litert_builder.cc
     litert_tensor_buffer.cc
     litert_tensor_buffer_requirements.cc
+    options/litert_compiler_options.cc
+    options/litert_cpu_options.cc
+    options/litert_google_tensor_options.cc
+    options/litert_gpu_options.cc
+    options/litert_intel_openvino_options.cc
+    options/litert_mediatek_options.cc
+    options/litert_qualcomm_options.cc
+    options/litert_runtime_options.cc
+    options/litert_samsung_options.cc
+    options/litert_webnn_options.cc
+)
+
+file(GLOB LITERT_C_DISCOVERED_PUBLIC_HEADERS
+    RELATIVE ${CMAKE_CURRENT_SOURCE_DIR}
+    CONFIGURE_DEPENDS
+    "*.h"
+    "options/*.h"
+)
+list(SORT LITERT_C_DISCOVERED_PUBLIC_HEADERS)
+set(_litert_c_expected_public_headers ${LITERT_C_PUBLIC_HEADERS})
+list(SORT _litert_c_expected_public_headers)
+if(NOT LITERT_C_DISCOVERED_PUBLIC_HEADERS STREQUAL _litert_c_expected_public_headers)
+    message(FATAL_ERROR
+        "litert/c public header manifest is out of sync.\n"
+        "Discovered:\n  ${LITERT_C_DISCOVERED_PUBLIC_HEADERS}\n"
+        "Expected:\n  ${_litert_c_expected_public_headers}\n"
+        "Update litert/c/CMakeLists.txt.")
+endif()
+
+file(GLOB LITERT_C_DISCOVERED_PUBLIC_SOURCES
+    RELATIVE ${CMAKE_CURRENT_SOURCE_DIR}
+    CONFIGURE_DEPENDS
+    "*.cc"
+    "options/*.cc"
+)
+list(FILTER LITERT_C_DISCOVERED_PUBLIC_SOURCES EXCLUDE REGEX "_test\\.cc$")
+list(FILTER LITERT_C_DISCOVERED_PUBLIC_SOURCES EXCLUDE REGEX "^empty\\.cc$")
+list(SORT LITERT_C_DISCOVERED_PUBLIC_SOURCES)
+set(_litert_c_expected_public_sources ${LITERT_C_PUBLIC_SOURCES})
+list(SORT _litert_c_expected_public_sources)
+if(NOT LITERT_C_DISCOVERED_PUBLIC_SOURCES STREQUAL _litert_c_expected_public_sources)
+    message(FATAL_ERROR
+        "litert/c public source manifest is out of sync.\n"
+        "Discovered:\n  ${LITERT_C_DISCOVERED_PUBLIC_SOURCES}\n"
+        "Expected:\n  ${_litert_c_expected_public_sources}\n"
+        "Update litert/c/CMakeLists.txt.")
+endif()
+
+set(LITERT_C_API_SOURCES
+    ${LITERT_C_INTERNAL_SOURCES}
+    ${LITERT_C_PUBLIC_SOURCES}
+)
+
+set(LITERT_C_HEADERS
+    ${LITERT_C_PUBLIC_HEADERS}
+    ${LITERT_C_REQUIRED_INTERNAL_HEADERS}
 )
 
 # Logging library (shared between core and C API)
@@ -69,13 +178,14 @@ target_include_directories(litert_c_api
         $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/../..>
         $<BUILD_INTERFACE:${TENSORFLOW_SOURCE_DIR}>
         $<BUILD_INTERFACE:${TFLITE_SOURCE_DIR}>
-        $<BUILD_INTERFACE:${TFLITE_BUILD_DIR}/opencl_headers>
+        $<BUILD_INTERFACE:${CMAKE_BINARY_DIR}/opencl_headers>
     PRIVATE
         ${CMAKE_CURRENT_SOURCE_DIR}
 )
 
 target_link_libraries(litert_c_api
     PUBLIC
+        litert_cc_internal
         litert_core
         litert_core_model
         litert_logging
@@ -95,30 +205,27 @@ if(LITERT_PLATFORM_ANDROID)
     target_link_libraries(litert_c_api PRIVATE ${LOG_LIB})
 endif()
 
-# Export headers
-set(LITERT_C_HEADERS
-    litert_common.h
-    litert_model.h
-    litert_options.h
-    litert_op_code.h
-    litert_tensor_buffer.h
-    litert_tensor_buffer_requirements.h
-    litert_tensor.h
-    litert_compiled_model.h
-    litert_compiler_plugin.h
-    litert_dispatch.h
-    litert_dispatch_delegate.h
-    litert_builder.h
-)
-
-
 set_target_properties(litert_c_api PROPERTIES
     PUBLIC_HEADER "${LITERT_C_HEADERS}"
 )
 
-foreach(header ${LITERT_C_HEADERS})
+foreach(header ${LITERT_C_PUBLIC_HEADERS})
     if(EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/${header})
         configure_file(${header} ${CMAKE_CURRENT_BINARY_DIR}/include/litert/c/${header} COPYONLY)
+    endif()
+endforeach()
+
+foreach(header ${LITERT_C_REQUIRED_INTERNAL_HEADERS})
+    if(EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/${header})
+        configure_file(${header} ${CMAKE_CURRENT_BINARY_DIR}/include/litert/c/${header} COPYONLY)
+    endif()
+endforeach()
+
+foreach(header ${LITERT_C_REQUIRED_VENDOR_HEADERS})
+    if(EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/../vendors/c/${header})
+        configure_file(${CMAKE_CURRENT_SOURCE_DIR}/../vendors/c/${header}
+                       ${CMAKE_CURRENT_BINARY_DIR}/include/litert/vendors/c/${header}
+                       COPYONLY)
     endif()
 endforeach()
 
@@ -128,7 +235,7 @@ add_subdirectory(options)
 # C API shared library
 add_library(litert_runtime_c_api_shared_lib SHARED empty.cc)
 set_target_properties(litert_runtime_c_api_shared_lib PROPERTIES
-    OUTPUT_NAME "LiteRtRuntimeCApi"
+    OUTPUT_NAME "LiteRt"
     POSITION_INDEPENDENT_CODE ON
 )
 set_target_properties(litert_runtime_c_api_shared_lib PROPERTIES INTERFACE_LINK_LIBRARIES "")
@@ -142,7 +249,7 @@ target_include_directories(litert_runtime_c_api_shared_lib
         $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/../..>
         $<BUILD_INTERFACE:${TENSORFLOW_SOURCE_DIR}>
         $<BUILD_INTERFACE:${TFLITE_SOURCE_DIR}>
-        $<BUILD_INTERFACE:${TFLITE_BUILD_DIR}/opencl_headers>
+        $<BUILD_INTERFACE:${CMAKE_CURRENT_BINARY_DIR}/opencl_headers>
     PRIVATE
         ${CMAKE_CURRENT_SOURCE_DIR}
 )
@@ -172,44 +279,6 @@ set(_litert_runtime_c_api_private_archives
     litert_runtime
     tensorflow-lite
     Threads::Threads
-    "${TFLITE_BUILD_DIR}/pthreadpool/libpthreadpool.a"
-    "${TFLITE_BUILD_DIR}/_deps/farmhash-build/libfarmhash.a"
-    "${TFLITE_BUILD_DIR}/_deps/fft2d-build/libfft2d_fftsg2d.a"
-    "${TFLITE_BUILD_DIR}/_deps/fft2d-build/libfft2d_fftsg.a"
-    "${TFLITE_BUILD_DIR}/_deps/cpuinfo-build/libcpuinfo.a"
-    "${TFLITE_BUILD_DIR}/libxnnpack-delegate.a"
-    "${TFLITE_BUILD_DIR}/_deps/xnnpack-build/libXNNPACK.a"
-    "${TFLITE_BUILD_DIR}/_deps/xnnpack-build/libxnnpack-microkernels-prod.a"
-    $<$<NOT:$<STREQUAL:${CMAKE_SYSTEM_PROCESSOR},x86_64>>:${TFLITE_BUILD_DIR}/kleidiai/libkleidiai.a>
-    "${TFLITE_BUILD_DIR}/_deps/ruy-build/ruy/libruy_allocator.a"
-    "${TFLITE_BUILD_DIR}/_deps/ruy-build/ruy/libruy_apply_multiplier.a"
-    "${TFLITE_BUILD_DIR}/_deps/ruy-build/ruy/libruy_block_map.a"
-    "${TFLITE_BUILD_DIR}/_deps/ruy-build/ruy/libruy_blocking_counter.a"
-    "${TFLITE_BUILD_DIR}/_deps/ruy-build/ruy/libruy_context.a"
-    "${TFLITE_BUILD_DIR}/_deps/ruy-build/ruy/libruy_context_get_ctx.a"
-    "${TFLITE_BUILD_DIR}/_deps/ruy-build/ruy/libruy_cpuinfo.a"
-    "${TFLITE_BUILD_DIR}/_deps/ruy-build/ruy/libruy_ctx.a"
-    "${TFLITE_BUILD_DIR}/_deps/ruy-build/ruy/libruy_denormal.a"
-    "${TFLITE_BUILD_DIR}/_deps/ruy-build/ruy/libruy_frontend.a"
-    "${TFLITE_BUILD_DIR}/_deps/ruy-build/ruy/libruy_have_built_path_for_avx.a"
-    "${TFLITE_BUILD_DIR}/_deps/ruy-build/ruy/libruy_have_built_path_for_avx2_fma.a"
-    "${TFLITE_BUILD_DIR}/_deps/ruy-build/ruy/libruy_have_built_path_for_avx512.a"
-    "${TFLITE_BUILD_DIR}/_deps/ruy-build/ruy/libruy_kernel_arm.a"
-    "${TFLITE_BUILD_DIR}/_deps/ruy-build/ruy/libruy_kernel_avx.a"
-    "${TFLITE_BUILD_DIR}/_deps/ruy-build/ruy/libruy_kernel_avx2_fma.a"
-    "${TFLITE_BUILD_DIR}/_deps/ruy-build/ruy/libruy_kernel_avx512.a"
-    "${TFLITE_BUILD_DIR}/_deps/ruy-build/ruy/libruy_pack_arm.a"
-    "${TFLITE_BUILD_DIR}/_deps/ruy-build/ruy/libruy_pack_avx.a"
-    "${TFLITE_BUILD_DIR}/_deps/ruy-build/ruy/libruy_pack_avx2_fma.a"
-    "${TFLITE_BUILD_DIR}/_deps/ruy-build/ruy/libruy_pack_avx512.a"
-    "${TFLITE_BUILD_DIR}/_deps/ruy-build/ruy/libruy_prepare_packed_matrices.a"
-    "${TFLITE_BUILD_DIR}/_deps/ruy-build/ruy/libruy_prepacked_cache.a"
-    "${TFLITE_BUILD_DIR}/_deps/ruy-build/ruy/libruy_system_aligned_alloc.a"
-    "${TFLITE_BUILD_DIR}/_deps/ruy-build/ruy/libruy_thread_pool.a"
-    "${TFLITE_BUILD_DIR}/_deps/ruy-build/ruy/libruy_trmul.a"
-    "${TFLITE_BUILD_DIR}/_deps/ruy-build/ruy/profiler/libruy_profiler_instrumentation.a"
-    "${TFLITE_BUILD_DIR}/_deps/ruy-build/ruy/libruy_tune.a"
-    "${TFLITE_BUILD_DIR}/_deps/ruy-build/ruy/libruy_wait.a"
 )
 
 # Provide missing TensorFlow Lite GPU GL core objects for Android builds.
@@ -316,4 +385,3 @@ if(LITERT_PLATFORM_ANDROID)
     find_library(ANDROID_GLESV2_LIB GLESv2)
     target_link_libraries(litert_runtime_c_api_shared_lib PRIVATE ${LOG_LIB} android log nativewindow ${ANDROID_EGL_LIB} ${ANDROID_GLESV3_LIB} ${ANDROID_GLESV2_LIB})
 endif()
-

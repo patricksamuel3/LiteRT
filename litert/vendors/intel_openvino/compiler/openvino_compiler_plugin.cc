@@ -13,18 +13,17 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include <stdio.h>
-
 #include <cstddef>
-#include <cstdlib>
-#include <exception>
+#include <ios>
 #include <memory>
-#include <sstream>
+#include <ostream>
+#include <streambuf>
 #include <string>
-#include <tuple>
+#include <utility>
 #include <vector>
 
 #include "openvino/core/any.hpp"
+#include "openvino/core/except.hpp"
 #include "openvino/frontend/tensorflow_lite/frontend.hpp"
 #include "openvino/frontend/tensorflow_lite/graph_iterator.hpp"
 #include "openvino/openvino.hpp"
@@ -37,6 +36,7 @@
 #include "litert/c/litert_op_code.h"
 #include "litert/c/options/litert_intel_openvino_options.h"
 #include "litert/cc/internal/litert_extended_model.h"
+#include "litert/cc/internal/litert_handle.h"
 #include "litert/cc/litert_environment_options.h"
 #include "litert/cc/litert_expected.h"
 #include "litert/cc/litert_macros.h"
@@ -44,16 +44,12 @@
 #include "litert/cc/litert_options.h"
 #include "litert/cc/options/litert_intel_openvino_options.h"
 #include "litert/vendors/c/litert_compiler_plugin.h"
-#include "litert/vendors/cc/options_helper.h"
 #include "litert/vendors/intel_openvino/compiler/graph_iterator.h"
+#include "litert/vendors/intel_openvino/compiler/openvino_soc_config.h"
 
 namespace {
 
 constexpr char kPluginManufacturer[] = "IntelOpenVINO";
-
-constexpr const char* kPluginSocModels[] = {
-    "NPU2700",
-};  // get the name for plugin soc model
 
 constexpr LiteRtOpCode kSupportedOps[] = {
     kLiteRtOpCodeTflConv2d,
@@ -90,6 +86,7 @@ constexpr LiteRtOpCode kSupportedOps[] = {
     kLiteRtOpCodeTflConv3d,
     kLiteRtOpCodeTflArgMax,
     kLiteRtOpCodeTflOneHot,
+    kLiteRtOpCodeTflUnpack,
     // These ops donot call get_attribute
     kLiteRtOpCodeTflDequantize,
     kLiteRtOpCodeTflLogistic,
@@ -127,6 +124,7 @@ constexpr LiteRtOpCode kSupportedOps[] = {
     kLiteRtOpCodeTflGreaterEqual,
     kLiteRtOpCodeTflLessEqual,
     kLiteRtOpCodeTflLogicalAnd,
+    kLiteRtOpCodeTflLogicalNot,
     kLiteRtOpCodeTflL2Normalization,
     kLiteRtOpCodeTflGreater,
     kLiteRtOpCodeTflRelu0To1,
@@ -134,9 +132,31 @@ constexpr LiteRtOpCode kSupportedOps[] = {
 };
 // clang format on
 
-constexpr auto kNumPluginSocModels =
-    sizeof(kPluginSocModels) / sizeof(kPluginSocModels[0]);
+// When exporting a model via the OpenVINO NPU plugin, standard string streams
+// might encounter a 32-bit std::streamsize limitation on specific platforms,
+// which restricts model export capacity. This custom output stream buffer
+// bypasses that limitation, enabling support for larger models.
+class CustomOStreamBuf : public std::streambuf {
+ public:
+  CustomOStreamBuf() = default;
+  std::string drain_str() { return std::move(target_); }
 
+ protected:
+  std::streamsize xsputn(const char* s, std::streamsize n) override {
+    target_.append(s, n);
+    return n;
+  }
+  int_type overflow(int_type ch) override {
+    if (ch != traits_type::eof()) {
+      target_.push_back(static_cast<char>(ch));
+      return ch;
+    }
+    return traits_type::eof();
+  }
+
+ private:
+  std::string target_;
+};
 }  // namespace
 
 LiteRtStatus LiteRtGetCompilerPluginVersion(LiteRtApiVersion* api_version) {
@@ -169,18 +189,19 @@ LiteRtStatus LiteRtGetNumCompilerPluginSupportedSocModels(
   if (compiler_plugin == nullptr || num_supported_soc_models == nullptr) {
     return kLiteRtStatusErrorInvalidArgument;
   }
-  *num_supported_soc_models = kNumPluginSocModels;
+  *num_supported_soc_models = litert::openvino::GetNumSocModels();
   return kLiteRtStatusOk;
 }
 
 LiteRtStatus LiteRtGetCompilerPluginSupportedSocModel(
     LiteRtCompilerPlugin compiler_plugin, LiteRtParamIndex soc_model_idx,
     const char** soc_model_name) {
-  if (compiler_plugin == nullptr || soc_model_idx >= kNumPluginSocModels ||
+  if (compiler_plugin == nullptr ||
+      soc_model_idx >= litert::openvino::GetNumSocModels() ||
       soc_model_name == nullptr) {
     return kLiteRtStatusErrorInvalidArgument;
   }
-  *soc_model_name = kPluginSocModels[soc_model_idx];
+  *soc_model_name = litert::openvino::GetSocModelName(soc_model_idx);
   return kLiteRtStatusOk;
 }
 
@@ -241,8 +262,24 @@ struct LiteRtCompilerPluginT {
   using IntelOpenVinoOptions = ::litert::intel_openvino::IntelOpenVinoOptions;
 
   LiteRtCompilerPluginT(LiteRtEnvironmentOptions env, LiteRtOptions options) {
-    std::tie(compiler_opts, opq, intel_openvino_opts) =
-        litert::ParseOptions<IntelOpenVinoOptions>(options);
+    if (options == nullptr) return;
+    auto cc_options = litert::Options(options, litert::OwnHandle::kNo);
+    auto opaques_status = cc_options.GetOpaqueOptions();
+    if (!opaques_status) return;
+
+    auto target_opq_status = litert::FindOpaqueOptions(
+        *opaques_status, LrtGetIntelOpenVinoOptionsIdentifier());
+    if (target_opq_status) {
+      auto payload_status = target_opq_status->GetData<const char>();
+      if (payload_status) {
+        LrtIntelOpenVinoOptions raw_options = nullptr;
+        if (LrtCreateIntelOpenVinoOptionsFromToml(
+                payload_status.Value(), &raw_options) == kLiteRtStatusOk) {
+          intel_openvino_opts =
+              IntelOpenVinoOptions::CreateFromOwnedHandle(raw_options);
+        }
+      }
+    }
   }
 
   const ::litert::Expected<IntelOpenVinoOptions>& GetIntelOpenVinoOptions()
@@ -292,10 +329,26 @@ LiteRtStatus LiteRtCompilerPluginPartition(LiteRtCompilerPlugin compiler_plugin,
                                            LiteRtOpList selected_ops) {
   ::litert::Subgraph graph(subgraph);
 
+  // Check if any subgraph input has dims.size() >= 6.
+  auto subgraph_inputs = graph.Inputs();
+  for (size_t i = 0; i < subgraph_inputs.size(); ++i) {
+    auto ranked_type = subgraph_inputs[i].RankedTensorType();
+    if (ranked_type.HasValue()) {
+      auto dims = ranked_type.Value().Layout().Dimensions();
+      if (dims.size() >= 6) {
+        LITERT_LOG(LITERT_WARNING,
+                   "Model not supported: subgraph input %zu has %zu dimensions "
+                   "(>= 6), skipping partitioning.",
+                   i, dims.size());
+        return kLiteRtStatusErrorUnsupported;
+      }
+    }
+  }
+
   // TODO(rjasuja): Enhance implementation for Partition() call
   for (const auto& op : graph.Ops()) {
     if (!IsOpSupported(op)) {
-      LITERT_LOG(LITERT_ERROR, "op type %d is not supported", op.Code());
+      LITERT_LOG(LITERT_INFO, "op type %d is not supported", op.Code());
       continue;
     }
     LITERT_RETURN_IF_ERROR(LiteRtPushOp(selected_ops, op.Get(), 0));
@@ -315,6 +368,7 @@ LiteRtStatus LiteRtCompilerPluginCompile(
     const auto num_partitions = model.NumSubgraphs();
 
     // Configure device and OpenVINO settings from Intel OpenVINO options
+
     std::string device = "NPU";  // Default device
     ov::AnyMap configs_map;
 
@@ -389,6 +443,9 @@ LiteRtStatus LiteRtCompilerPluginCompile(
       LITERT_LOG(LITERT_INFO, "Using default configuration (LATENCY mode)");
     }
 
+    LITERT_RETURN_IF_ERROR(
+        litert::openvino::ConfigureCompilationParams(soc_model, configs_map));
+
     auto result = std::make_unique<LiteRtCompiledResultT>();
     result->byte_code.resize(num_partitions);
     result->graph_names.resize(num_partitions);
@@ -411,11 +468,13 @@ LiteRtStatus LiteRtCompilerPluginCompile(
         auto ov_model = tflite_fe->convert(input_model);
 
         // Use device and configs_map from Intel OpenVINO options
-        std::ostringstream oss;
         auto compiled_model = core.compile_model(ov_model, device, configs_map);
+
+        CustomOStreamBuf obuf;
+        std::ostream oss(&obuf);
         compiled_model.export_model(oss);
         LITERT_LOG(LITERT_INFO, "Model export done");
-        result->byte_code[partition_idx] = oss.str();
+        result->byte_code[partition_idx] = obuf.drain_str();
 
         result->graph_names.emplace_back(graph_name);
       } else {
@@ -426,7 +485,7 @@ LiteRtStatus LiteRtCompilerPluginCompile(
     *compiled_result = result.release();
     // TODO: Add support for caching
     return kLiteRtStatusOk;
-  } catch (const std::exception& e) {
+  } catch (const ov::Exception& e) {
     LITERT_LOG(LITERT_ERROR, "Exception in compilation: %s", e.what());
     return kLiteRtStatusErrorCompilation;
   }

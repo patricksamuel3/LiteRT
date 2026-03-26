@@ -53,17 +53,16 @@ litert_dynamic_lib(
     ],
     deps = [
         ":qnn_compose_graph",
+        "//litert/c:litert_common",
         "//litert/c:litert_runtime_c_api_shared_lib",
         "//litert/c/internal:litert_logging",
-        "//litert/cc:litert_element_type",
-        "//litert/cc:litert_environment_options",
+        "//litert/c/options:litert_qualcomm_options",
         "//litert/cc:litert_expected",
         "//litert/cc:litert_macros",
         "//litert/cc/dynamic_runtime:litert_extended_model",
         "//litert/cc/dynamic_runtime:litert_opaque_options",
         "//litert/cc/dynamic_runtime:litert_options",
-        "//litert/cc/dynamic_runtime/options:litert_qualcomm_options",
-        "//litert/vendors/cc:options_helper",
+        "//litert/cc/options:litert_qualcomm_options",
         "//litert/vendors/qualcomm:common",
         "//litert/vendors/qualcomm:qnn_manager",
         "//litert/vendors/qualcomm/core:common",
@@ -75,7 +74,6 @@ litert_dynamic_lib(
         "@com_google_absl//absl/container:flat_hash_map",
         "@com_google_absl//absl/strings:str_format",
         "@com_google_absl//absl/strings:string_view",
-        "@flatbuffers",
     ],
 )
 
@@ -112,6 +110,7 @@ litert_test(
     use_sys_malloc = True,
     deps = [
         ":qnn_compiler_plugin",  # buildcleaner: keep
+        "//litert/c:litert_common",
         "//litert/c:litert_runtime_c_api_shared_lib",
         "//litert/c/internal:litert_logging",
         "//litert/c/options:litert_qualcomm_options",
@@ -120,7 +119,7 @@ litert_test(
         "//litert/cc/dynamic_runtime:litert_extended_model",
         "//litert/cc/dynamic_runtime:litert_model_predicates",
         "//litert/cc/dynamic_runtime:litert_options",
-        "//litert/cc/dynamic_runtime/options:litert_qualcomm_options",
+        "//litert/cc/options:litert_qualcomm_options",
         "//litert/core/model:model_testonly",
         "//litert/test:common",
         "//litert/test:matchers_oss",
@@ -147,6 +146,7 @@ litert_lib(
     hdrs = ["qnn_compose_graph.h"],
     deps = [
         ":graph_mapper",
+        "//litert/c:litert_common",
         "//litert/c:litert_runtime_c_api_shared_lib",
         "//litert/c/internal:litert_logging",
         "//litert/cc:litert_element_type",
@@ -217,6 +217,7 @@ litert_lib(
         "//litert/vendors/qualcomm/core/wrappers:op_wrapper",
         "//litert/vendors/qualcomm/core/wrappers:quantize_params_wrapper",
         "//litert/vendors/qualcomm/core/wrappers:tensor_wrapper",
+        "@com_google_absl//absl/base:no_destructor",
         "@com_google_absl//absl/container:flat_hash_map",
         "@com_google_absl//absl/container:flat_hash_set",
         "@com_google_absl//absl/strings",
@@ -232,6 +233,7 @@ litert_lib(
     hdrs = ["graph_mapper.h"],
     visibility = ["//litert:__subpackages__"],
     deps = [
+        "//litert/c:litert_common",
         "//litert/c:litert_runtime_c_api_shared_lib",
         "//litert/c/internal:litert_logging",
         "//litert/cc:litert_element_type",
