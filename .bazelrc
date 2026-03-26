@@ -46,8 +46,8 @@ build --incompatible_enable_cc_toolchain_resolution
 build --repo_env USE_HERMETIC_CC_TOOLCHAIN=1
 
 # TODO: Migrate for https://github.com/bazelbuild/bazel/issues/7260
-build:clang_local --noincompatible_enable_cc_toolchain_resolution
-build:clang_local --noincompatible_enable_android_toolchain_resolution
+# build:clang_local --noincompatible_enable_cc_toolchain_resolution
+# build:clang_local --noincompatible_enable_android_toolchain_resolution
 build:clang_local --repo_env USE_HERMETIC_CC_TOOLCHAIN=1
 
 build --repo_env=USE_PYWRAP_RULES=True
@@ -147,8 +147,6 @@ common --registry=https://raw.githubusercontent.com/bazelbuild/bazel-central-reg
 # target CPU to build transient dependencies correctly. See
 # https://docs.bazel.build/versions/master/user-manual.html#flag--fat_apk_cpu
 build:android --config=clang_local
-build:android --crosstool_top=//external:android/crosstool
-build:android --host_crosstool_top=@bazel_tools//tools/cpp:toolchain
 build:android_arm --config=android
 build:android_arm --cpu=armeabi-v7a
 build:android_arm --fat_apk_cpu=armeabi-v7a
@@ -237,10 +235,10 @@ build:ios_fat --ios_multi_cpus=armv7,arm64,i386,x86_64
 # Config to use a mostly-static build and disable modular op registration
 # support (this will revert to loading TensorFlow with RTLD_GLOBAL in Python).
 # By default, TensorFlow will build with a dependence on
-# //tensorflow:libtensorflow_framework.so.
-build:monolithic --define framework_shared_object=false
-build:monolithic --define tsl_protobuf_header_only=false
-build:monolithic --experimental_link_static_libraries_once=false  # b/229868128
+# # //tensorflow:libtensorflow_framework.so.
+# build:monolithic --define framework_shared_object=false
+# build:monolithic --define tsl_protobuf_header_only=false
+# build:monolithic --experimental_link_static_libraries_once=false  # b/229868128
 
 # Debug config
 build:dbg -c dbg
@@ -251,13 +249,13 @@ build:dbg -c dbg
 # Users can still include debug info for a specific kernel, e.g. with:
 #     --config=dbg --per_file_copt=+tensorflow/core/kernels/identity_op.*@-g
 # Since this .bazelrc file is synced between the tensorflow/tensorflow repo and
-# the openxla/xla repo, also include debug info for files under xla/.
-build:dbg --per_file_copt=+.*,-tensorflow.*,-xla.*@-g0
-build:dbg --per_file_copt=+tensorflow/core/kernels.*@-g0
-# for now, disable arm_neon. see: https://github.com/tensorflow/tensorflow/issues/33360
-build:dbg --cxxopt -DTF_LITE_DISABLE_X86_NEON
-# AWS SDK must be compiled in release mode. see: https://github.com/tensorflow/tensorflow/issues/37498
-build:dbg --copt -DDEBUG_BUILD
+# # the openxla/xla repo, also include debug info for files under xla/.
+# build:dbg --per_file_copt=+.*,-tensorflow.*,-xla.*@-g0
+# build:dbg --per_file_copt=+tensorflow/core/kernels.*@-g0
+# # for now, disable arm_neon. see: https://github.com/tensorflow/tensorflow/issues/33360
+# build:dbg --cxxopt -DTF_LITE_DISABLE_X86_NEON
+# # AWS SDK must be compiled in release mode. see: https://github.com/tensorflow/tensorflow/issues/37498
+# build:dbg --copt -DDEBUG_BUILD
 
 # Options to disable default on features
 build:nogcp --define=no_gcp_support=true
@@ -443,8 +441,8 @@ build:windows --verbose_failures
 # See: https://github.com/bazelbuild/bazel/issues/5163
 build:windows --features=compiler_param_file
 
-# Disable problematic features on Windows
-build:windows --define=tflite_with_xnnpack=false
+# # Disable problematic features on Windows
+# build:windows --define=tflite_with_xnnpack=false
 
 # Minimal build configuration
 build:windows --define=build_with_mkl=false
@@ -477,16 +475,16 @@ build:ios     --define=with_xla_support=false
 common --experimental_repo_remote_exec
 
 # TFLite build configs for generic embedded Linux
-build:elinux --config=clang_local
-build:elinux --crosstool_top=@local_config_embedded_arm//:toolchain
-build:elinux --host_crosstool_top=@bazel_tools//tools/cpp:toolchain
-build:elinux_aarch64 --config=elinux
-build:elinux_aarch64 --cpu=aarch64
-build:elinux_aarch64 --platforms=@org_tensorflow//tensorflow/tools/toolchains/linux:linux_aarch64
-build:elinux_armhf --config=elinux
-build:elinux_armhf --cpu=armhf
-build:elinux_armhf --platforms=@org_tensorflow//tensorflow/tools/toolchains/linux:linux_armhf
-build:elinux_armhf --copt -mfp16-format=ieee
+# build:elinux --config=clang_local
+# build:elinux --crosstool_top=@local_config_embedded_arm//:toolchain
+# build:elinux --host_crosstool_top=@bazel_tools//tools/cpp:toolchain
+# build:elinux_aarch64 --config=elinux
+# build:elinux_aarch64 --cpu=aarch64
+# build:elinux_aarch64 --platforms=@org_tensorflow//tensorflow/tools/toolchains/linux:linux_aarch64
+# build:elinux_armhf --config=elinux
+# build:elinux_armhf --cpu=armhf
+# build:elinux_armhf --platforms=@org_tensorflow//tensorflow/tools/toolchains/linux:linux_armhf
+# build:elinux_armhf --copt -mfp16-format=ieee
 
 # Config-specific options should come above this line.
 
@@ -501,16 +499,16 @@ try-import %workspace%/.bazelrc.user
 # Try to load the XLA warnings config if available
 try-import %workspace%/warnings.bazelrc
 
-# Options to build TensorFlow 1.x or 2.x.
-build:v2 --define=tf_api_version=2 --action_env=TF2_BEHAVIOR=1
-build --config=v2
+# # Options to build TensorFlow 1.x or 2.x.
+# build:v2 --define=tf_api_version=2 --action_env=TF2_BEHAVIOR=1
+# build --config=v2
 
-# Options to filter filepath prefixes when generating python api's
-build:litert_prefixes --define=litert_prefixes="external/org_tensorflow/"
-build --config=litert_prefixes
+# # Options to filter filepath prefixes when generating python api's
+# build:litert_prefixes --define=litert_prefixes="external/org_tensorflow/"
+# build --config=litert_prefixes
 
-# Disables generating api v2 under the submodule tensorflow/lite/python.
-build --define=disable_tf_lite_py=true
+# # Disables generating api v2 under the submodule tensorflow/lite/python.
+# build --define=disable_tf_lite_py=true
 
 # Config to use a gcs bucket as remote cache.
 build:public_cache --remote_cache="https://storage.googleapis.com/litert-bazel-artifacts" --remote_upload_local_results=false
@@ -522,12 +520,12 @@ build:public_cache_push --config=public_cache --remote_upload_local_results=true
 # BEGIN LITERT REMOTE BUILD EXECUTION OPTIONS
 # WARNING: THESE OPTIONS WONT WORK IF YOU DO NOT HAVE PROPER AUTHENTICATION AND PERMISSIONS
 
-# Allow creation of resultstore URLs for any bazel invocation
-build:resultstore --google_default_credentials
-build:resultstore --bes_backend=buildeventservice.googleapis.com
-build:resultstore --bes_instance_name="tensorflow-testing"
-build:resultstore --bes_results_url="https://source.cloud.google.com/results/invocations"
-build:resultstore --bes_timeout=600s
+# # Allow creation of resultstore URLs for any bazel invocation
+# build:resultstore --google_default_credentials
+# build:resultstore --bes_backend=buildeventservice.googleapis.com
+# build:resultstore --bes_instance_name="tensorflow-testing"
+# build:resultstore --bes_results_url="https://source.cloud.google.com/results/invocations"
+# build:resultstore --bes_timeout=600s
 
 # Flag to enable remote config
 common --experimental_repo_remote_exec
@@ -595,8 +593,8 @@ common --noenable_bzlmod
 # NOTE: due to bazel caching, when switching from http_archive to local_repository,
 # do a bazel clean --expunge --async before building or use the
 # flag --override_repository=org_tensorflow=$TF_LOCAL_SOURCE_PATH
-build:use_local_tf --action_env=USE_LOCAL_TF=true
-build:use_local_tf --action_env=TF_LOCAL_SOURCE_PATH
-test:use_local_tf --action_env=USE_LOCAL_TF=true
-test:use_local_tf --action_env=TF_LOCAL_SOURCE_PATH
+# build:use_local_tf --action_env=USE_LOCAL_TF=true
+# build:use_local_tf --action_env=TF_LOCAL_SOURCE_PATH
+# test:use_local_tf --action_env=USE_LOCAL_TF=true
+# test:use_local_tf --action_env=TF_LOCAL_SOURCE_PATH
 # END-INTERNAL

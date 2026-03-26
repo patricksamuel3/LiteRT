@@ -1,0 +1,85 @@
+name: "android build"
+
+on:
+  pull_request:
+    branches:
+    - main
+  schedule:
+    - cron: "0 0 * * *"  # Runs at 0:00 UTC every day
+  workflow_dispatch:
+    inputs:
+      release_version:
+        description: 'Release version (default: 0.0.0-nightly-SNAPSHOT)'
+        required: false
+        default: ''
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.head_ref || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build_android_packages:
+    name: "Build Android Packages"
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          submodules: 'recursive'
+
+      - name: Install Android NDK r25c
+        id: setup-ndk
+        uses: nttld/setup-ndk@v1
+        with:
+          ndk-version: r25c
+
+      - name: Export ANDROID_NDK_HOME
+        run: echo "ANDROID_NDK_HOME=${{ steps.setup-ndk.outputs.ndk-path }}" >> "$GITHUB_ENV"
+
+      - name: Build Android packages
+        env:
+          USE_BAZEL_VERSION: '7.6.1'
+          RELEASE_VERSION: ${{ github.event.inputs.release_version || '0.0.0-nightly-SNAPSHOT' }}
+        run: |
+          bazel build \
+            --action_env=ANDROID_NDK_HOME="$ANDROID_NDK_HOME" \
+            --action_env=ANDROID_HOME="$ANDROID_HOME" \
+            --repo_env=ANDROID_NDK_HOME="$ANDROID_NDK_HOME" \
+            --repo_env=ANDROID_HOME="$ANDROID_HOME" \
+            --noenable_bzlmod \
+            -c opt \
+            --config=android_arm64 \
+            --fat_apk_cpu=x86,x86_64,arm64-v8a,armeabi-v7a \
+            --android_platforms=@org_tensorflow//tensorflow/tools/toolchains/android:x86,@org_tensorflow//tensorflow/tools/toolchains/android:x86_64,@org_tensorflow//tensorflow/tools/toolchains/android:arm64-v8a,@org_tensorflow//tensorflow/tools/toolchains/android:armeabi-v7a \
+            --toolchain_resolution_debug='@@bazel_tools//tools/android:sdk_toolchain_type' \
+            --define=android_dexmerger_tool=d8_dexmerger \
+            --define=android_incremental_dexing_tool=d8_dexbuilder \
+            --show_timestamps \
+            @org_tensorflow//tensorflow/lite/java:tensorflow-lite-api \
+            @org_tensorflow//tensorflow/lite/java:tensorflow-lite \
+            @org_tensorflow//tensorflow/lite/java:tensorflow-lite-gpu-api \
+            @org_tensorflow//tensorflow/lite/java:tensorflow-lite-gpu \
+            @org_tensorflow//tensorflow/lite/acceleration/configuration:gpu_plugin \
+            @org_tensorflow//tensorflow/lite/acceleration/configuration:nnapi_plugin
+
+    #   - name: Upload build artifacts
+    #     if: success()
+    #     uses: actions/upload-artifact@v4
+    #     with:
+    #       name: android-packages
+    #       path: ci/gen/
+    #       retention-days: 7
+
+      - name: Report build status
+        if: always()
+        run: |
+          if [ $? -eq 0 ]; then
+            echo "Android build completed successfully"
+          else
+            echo "Android build failed"
+            exit 1
+          fi

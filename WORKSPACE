@@ -119,6 +119,40 @@ load("@org_tensorflow//tensorflow:workspace0.bzl", "tf_workspace0")
 
 tf_workspace0()
 
+# Configure Android SDK and NDK repositories for kt_android_library
+# This registers the Android SDK toolchain that rules_kotlin requires
+http_archive(
+    name = "rules_android",
+    sha256 = "7c45b6aaa837fb6f2f23ad11387638cb00fa9f839a04ec564caac70a543a9cd5",
+    strip_prefix = "rules_android-0.7.1",
+    url = "https://github.com/bazelbuild/rules_android/releases/download/v0.7.1/rules_android-v0.7.1.tar.gz",
+)
+
+http_archive(
+    name = "rules_android_ndk",
+    sha256 = "07e7a2777113bb3d0a432265d1c78cfaa140a5bc4c82be4c8cd988b34382ec90",
+    strip_prefix = "rules_android_ndk-0.1.5",
+    url = "https://github.com/bazelbuild/rules_android_ndk/releases/download/v0.1.5/rules_android_ndk-v0.1.5.tar.gz",
+)
+
+load("@rules_android//rules:rules.bzl", "android_sdk_repository")
+load("@rules_android_ndk//:rules.bzl", "android_ndk_repository")
+
+android_sdk_repository(
+    name = "androidsdk",
+)
+
+android_ndk_repository(
+    name = "androidndk",
+)
+
+register_toolchains("@androidndk//:all")
+register_toolchains("@androidsdk//:all")
+
+# Manually alias the SDK toolchain mapped to `@bazel_tools//tools/android:sdk_toolchain_type`
+# for legacy TensorFlow compatibility when Bzlmod is disabled.
+register_toolchains("//:fallback_legacy_android_sdk_toolchain")
+
 load(
     "@xla//third_party/py:python_wheel.bzl",
     "python_wheel_version_suffix_repository",
@@ -166,6 +200,11 @@ load(
 
 cuda_redist_init_repositories(
     cuda_redistributions = CUDA_REDISTRIBUTIONS,
+)
+
+load(
+    "@rules_ml_toolchain//gpu/cuda:cuda_redist_init_repositories.bzl",
+    "cudnn_redist_init_repository",
 )
 
 cudnn_redist_init_repository(
